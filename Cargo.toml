@@ -1,12 +1,15 @@
 [package]
 name = "cheesecloth"
 version = "0.1.0"
+authors = ["ALEA Institute <hello@aleainstitute.ai>"]
 edition = "2021"
-description = "A text analysis toolkit for measuring and analyzing language data"
+description = "High-performance text metrics and filtering for large-scale corpora and pretrain curation"
 license = "MIT"
-homepage = "https://github.com/alea-institute/cheesecloth"
+homepage = "https://aleainstitute.ai/"
 repository = "https://github.com/alea-institute/cheesecloth"
 readme = "README.md"
+keywords = ["alea", "llm", "data", "cheesecloth", "kl3m"]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
