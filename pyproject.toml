@@ -1,0 +1,49 @@
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "cheesecloth"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+dependencies = [
+    "datasets>=3.1.0",
+    "tokenizers>=0.21.0",
+    "tqdm>=4.67.1",
+]
+
+[project.scripts]
+cheesecloth-analyze = "cheesecloth.cli:main"
+[project.optional-dependencies]
+tests = [
+    "pytest",
+]
+[tool.maturin]
+python-source = "python"
+features = ["pyo3/extension-module"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
+    "pylint>=3.2.7",
+    "pytest>=8.3.5",
+    "pytest-benchmark>=4.0.0",
+]
+
+[tool.pylint.MASTER]
+ignore-patterns = [""]
+
+[tool.pylint.MESSAGES_CONTROL]
+disable = [
+    "broad-exception-caught",  # W0718: Catching too general exception
+    "line-too-long",           # C0301: Line too long
+]
+
+[tool.pylint."TYPECHECK"]
+# List of members which are set dynamically and missed by pylint inference system
+generated-members = "cheesecloth.*"
