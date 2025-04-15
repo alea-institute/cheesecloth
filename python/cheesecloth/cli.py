@@ -132,12 +132,77 @@ except ImportError:
 
 
 import cheesecloth
+from cheesecloth.tokenized_metrics import AllMetrics
 
 
 # Helper function to get current time
 def import_time():
     """Return the current datetime for tracking when imports/processing happened."""
     return datetime.datetime.now()
+
+
+# Readability calculation helper functions
+def calculate_readability_score(text, include_punctuation=False, case_sensitive=True):
+    """Calculate readability score for a text using the AllMetrics class."""
+    try:
+        # Get metrics using get_all_metrics
+        metrics_dict = cheesecloth.get_all_metrics(
+            text, 
+            include_punctuation=include_punctuation,
+            case_sensitive=case_sensitive,
+            use_paragraph_processing=True
+        )
+        
+        # Create AllMetrics object
+        all_metrics = AllMetrics.from_dict(metrics_dict)
+        
+        # Calculate and return readability score
+        return all_metrics.calculate_readability_score()
+    except Exception as e:
+        print(f"Error calculating readability score: {e}", file=sys.stderr)
+        return 0.0
+
+
+def get_readability_level(text, include_punctuation=False, case_sensitive=True):
+    """Get readability level label for a text using the AllMetrics class."""
+    try:
+        # Get metrics using get_all_metrics
+        metrics_dict = cheesecloth.get_all_metrics(
+            text, 
+            include_punctuation=include_punctuation,
+            case_sensitive=case_sensitive,
+            use_paragraph_processing=True
+        )
+        
+        # Create AllMetrics object
+        all_metrics = AllMetrics.from_dict(metrics_dict)
+        
+        # Get and return readability level
+        return all_metrics.get_readability_level()
+    except Exception as e:
+        print(f"Error getting readability level: {e}", file=sys.stderr)
+        return "Unknown"
+
+
+def get_readability_factors(text, include_punctuation=False, case_sensitive=True):
+    """Get detailed readability factors for a text using the AllMetrics class."""
+    try:
+        # Get metrics using get_all_metrics
+        metrics_dict = cheesecloth.get_all_metrics(
+            text, 
+            include_punctuation=include_punctuation,
+            case_sensitive=case_sensitive,
+            use_paragraph_processing=True
+        )
+        
+        # Create AllMetrics object
+        all_metrics = AllMetrics.from_dict(metrics_dict)
+        
+        # Get and return readability assessment
+        return all_metrics.get_readability_assessment()
+    except Exception as e:
+        print(f"Error getting readability factors: {e}", file=sys.stderr)
+        return {}
 
 
 def run_with_profiling(func, profile_output=None):
@@ -196,8 +261,97 @@ def run_with_profiling(func, profile_output=None):
     return result
 
 
-# Define metric groups
+# Define metric groups to align with Rust library module structure
 METRIC_GROUPS = {
+    # Character metrics (from char module)
+    "char": [
+        "char_count",
+        "letter_count",
+        "digit_count",
+        "punctuation_count",
+        "symbol_count",
+        "whitespace_count",
+        "non_ascii_count",
+        "uppercase_count",
+        "lowercase_count",
+        "alphanumeric_count",
+        "is_ascii",
+        "ascii_ratio",
+        "uppercase_ratio",
+        "alphanumeric_ratio",
+        "alpha_to_numeric_ratio",
+        "whitespace_ratio",
+        "digit_ratio",
+        "punctuation_ratio",
+        "char_entropy",
+    ],
+    # Text segmentation metrics (from text module)
+    "text": [
+        "word_count",
+        "line_count",
+        "avg_line_length",
+        "paragraph_count",
+        "avg_paragraph_length",
+        "avg_word_length",
+        "avg_sentence_length",
+    ],
+    # Unigram metrics (from unigram module)
+    "unigram": [
+        "unigram_count",
+        "unique_unigram_count",
+        "unigram_type_token_ratio",
+        "unigram_repetition_rate",
+        "unigram_frequency",
+        "unigram_entropy",
+    ],
+    # Readability metrics (combined metrics for text analysis)
+    "readability": [
+        "readability_score",
+        "readability_level",
+        "readability_factors",
+    ],
+    # Pattern metrics (from patterns module)
+    "patterns": [
+        "question_count",
+        "interrogative_question_count",
+        "complex_interrogative_count",
+        "factual_statement_count",
+        "logical_reasoning_count",
+        "section_heading_count",
+        "copyright_mention_count",
+        "rights_reserved_count",
+        "bullet_count",
+        "ellipsis_count",
+        "bullet_ellipsis_ratio",
+        "contains_code",
+    ],
+    # Compression metrics (from compression module)
+    "compression": [
+        "compression_ratio",
+        "unigram_compression_ratio",
+    ],
+    # Zipf's law and distribution metrics (from zipf module)
+    "zipf": [
+        "zipf_fitness_score",
+        "power_law_exponent",
+    ],
+    # ML tokenization metrics (from token module)
+    "token": [
+        "subword_token_count",
+        "unique_subword_count",
+        "subword_type_token_ratio",
+        "subword_repetition_rate",
+        "subword_entropy",
+        "subword_efficiency",
+    ],
+    # Frequency analyses (cross-cutting across modules)
+    "frequency": [
+        "char_frequency",
+        "char_type_frequency",
+        "unicode_category_frequency",
+        "unicode_category_group_frequency",
+    ],
+    # Legacy groups for backward compatibility
     "basic": [
         "char_count",
         "word_count",
@@ -235,27 +389,14 @@ METRIC_GROUPS = {
         "avg_word_length",
         "avg_sentence_length",
     ],
-    "frequency": [
-        "char_frequency",
-        "char_type_frequency",
-        "unicode_category_frequency",
-        "unicode_category_group_frequency",
-    ],
-    "unigram": [
-        "unigram_count",
-        "unique_unigram_count",
-        "unigram_type_token_ratio",
-        "unigram_repetition_rate",
-        "unigram_frequency",
-    ],
 }
 
 # Create a mapping from metric name to function
 METRIC_FUNCTIONS = {
-    # Basic metrics
+    #
+    # Character module metrics (char)
+    #
     "char_count": cheesecloth.count_chars,
-    "word_count": cheesecloth.count_words,
-    # Character type metrics
     "letter_count": cheesecloth.count_letters,
     "digit_count": cheesecloth.count_digits,
     "punctuation_count": cheesecloth.count_punctuation,
@@ -265,7 +406,6 @@ METRIC_FUNCTIONS = {
     "uppercase_count": cheesecloth.count_uppercase,
     "lowercase_count": cheesecloth.count_lowercase,
     "alphanumeric_count": cheesecloth.count_alphanumeric,
-    # Ratio metrics
     "is_ascii": cheesecloth.is_ascii,
     "ascii_ratio": cheesecloth.ratio_ascii,
     "uppercase_ratio": cheesecloth.ratio_uppercase,
@@ -274,21 +414,22 @@ METRIC_FUNCTIONS = {
     "whitespace_ratio": cheesecloth.ratio_whitespace,
     "digit_ratio": cheesecloth.ratio_digits,
     "punctuation_ratio": cheesecloth.ratio_punctuation,
-    # Entropy metrics
     "char_entropy": cheesecloth.char_entropy,
-    # Segmentation metrics
+    
+    #
+    # Text segmentation metrics (text)
+    #
+    "word_count": cheesecloth.count_words,
     "line_count": cheesecloth.count_lines,
     "avg_line_length": cheesecloth.average_line_length,
     "paragraph_count": cheesecloth.count_paragraphs,
     "avg_paragraph_length": cheesecloth.average_paragraph_length,
     "avg_word_length": cheesecloth.average_word_length,
     "avg_sentence_length": cheesecloth.average_sentence_length,
-    # Frequency metrics
-    "char_frequency": cheesecloth.get_char_frequency,
-    "char_type_frequency": cheesecloth.get_char_type_frequency,
-    "unicode_category_frequency": cheesecloth.get_unicode_category_frequency,
-    "unicode_category_group_frequency": cheesecloth.get_unicode_category_group_frequency,
-    # Unigram metrics
+    
+    #
+    # Unigram metrics (unigram)
+    #
     "unigram_count": lambda text: cheesecloth.count_unigram_tokens(
         text, include_punctuation=False
     ),
@@ -307,20 +448,94 @@ METRIC_FUNCTIONS = {
     "unigram_entropy": lambda text: cheesecloth.unigram_entropy(
         text, include_punctuation=False, case_sensitive=True
     ),
+    
+    #
+    # Pattern-based metrics (patterns)
+    #
+    "question_count": cheesecloth.count_question_strings,
+    "interrogative_question_count": cheesecloth.count_interrogative_questions,
+    "complex_interrogative_count": cheesecloth.count_complex_interrogatives,
+    "factual_statement_count": cheesecloth.count_factual_statements,
+    "logical_reasoning_count": cheesecloth.count_logical_reasoning,
+    "section_heading_count": cheesecloth.count_section_strings,
+    "copyright_mention_count": cheesecloth.count_copyright_mentions,
+    "rights_reserved_count": cheesecloth.count_rights_reserved,
+    "bullet_count": lambda text: len(cheesecloth.BULLET_REGEX.findall(text)) if hasattr(cheesecloth, 'BULLET_REGEX') else 0,
+    "ellipsis_count": lambda text: len(cheesecloth.ELLIPSIS_REGEX.findall(text)) if hasattr(cheesecloth, 'ELLIPSIS_REGEX') else 0,
+    "bullet_ellipsis_ratio": cheesecloth.bullet_or_ellipsis_lines_ratio,
+    "contains_code": cheesecloth.contains_code_characters,
+    
+    #
+    # Compression metrics (compression)
+    #
+    "compression_ratio": cheesecloth.compression_ratio,
+    "unigram_compression_ratio": lambda text: cheesecloth.unigram_compression_ratio(
+        text, include_punctuation=False
+    ),
+    
+    #
+    # Zipf's law and distribution metrics (zipf)
+    #
+    "zipf_fitness_score": lambda text: cheesecloth.zipf_fitness_score(
+        text, include_punctuation=False, case_sensitive=True
+    ),
+    "power_law_exponent": lambda text: cheesecloth.power_law_exponent(
+        text, include_punctuation=False, case_sensitive=True
+    ),
+    
+    #
+    # ML-based tokenization metrics (token) - these require tokenizer path
+    # so they're included for completeness but won't work without additional config
+    #
+    "subword_token_count": lambda text: cheesecloth.subword_token_count(text, None),
+    "unique_subword_count": lambda text: cheesecloth.unique_subword_count(text, None),
+    "subword_type_token_ratio": lambda text: cheesecloth.subword_type_token_ratio(text, None),
+    "subword_repetition_rate": lambda text: cheesecloth.subword_repetition_rate(text, None),
+    "subword_entropy": lambda text: cheesecloth.subword_entropy(text, None),
+    "subword_efficiency": lambda text: cheesecloth.subword_efficiency(text, None),
+    
+    #
+    # Frequency metrics (cross-cutting across modules)
+    #
+    "char_frequency": cheesecloth.get_char_frequency,
+    "char_type_frequency": cheesecloth.get_char_type_frequency,
+    "unicode_category_frequency": cheesecloth.get_unicode_category_frequency,
+    "unicode_category_group_frequency": cheesecloth.get_unicode_category_group_frequency,
+    
+    #
+    # Readability metrics (combined metrics using AllMetrics)
+    #
+    "readability_score": lambda text: calculate_readability_score(text, 
+                                     include_punctuation=False, case_sensitive=True),
+    "readability_level": lambda text: get_readability_level(text, 
+                                    include_punctuation=False, case_sensitive=True),
+    "readability_factors": lambda text: get_readability_factors(text, 
+                                      include_punctuation=False, case_sensitive=True),
 }
 
 
 def get_enabled_metrics(args):
     """Get the list of metrics to calculate based on CLI arguments."""
     enabled_metrics = []
-
+    
+    # Patterns group is excluded from "all" by default due to performance impact
+    # unless explicitly requested
+    slow_groups = ["patterns"]
+    
     # Include specific groups
     for group in args.include_groups:
         if group == "all":
-            # Enable all groups except those explicitly excluded
+            # Enable all groups except those explicitly excluded and slow groups
             for g, metrics in METRIC_GROUPS.items():
-                if g not in args.exclude_groups:
+                if g not in args.exclude_groups and g not in slow_groups:
                     enabled_metrics.extend(metrics)
+                    
+            # Output a note about excluded groups
+            if not any(g in args.include_groups for g in slow_groups):
+                print(f"Note: Performance-intensive groups {slow_groups} are not included by default.", 
+                      file=sys.stderr)
+                print(f"      To include them, explicitly add them to --include-groups.", 
+                      file=sys.stderr)
         elif group in METRIC_GROUPS:
             enabled_metrics.extend(METRIC_GROUPS[group])
         else:
@@ -611,9 +826,47 @@ def compute_metrics_for_dataset(dataset, args, metrics_to_calculate, output_stre
     # Set up unigram function parameters based on command line args
     include_punctuation = args.unigram_include_punctuation
     case_sensitive = not args.unigram_case_insensitive
-
-    # Use the hyper-optimized analyzer if requested, otherwise use batch processor
-    if args.use_hyper:
+    
+    # Determine which optimization mode to use
+    all_metrics_mode = False
+    optimized_metrics_mode = False
+    
+    # Check if optimized char and unigram metrics are requested
+    if args.use_optimized_metrics:
+        optimized_metrics_mode = True
+        print("Using optimized get_all_char_metrics and get_all_unigram_metrics (explicitly requested)", file=sys.stderr)
+    # Check if all metrics are requested
+    elif args.use_all_metrics:
+        all_metrics_mode = True
+        print("Using get_all_metrics (explicitly requested via --use-all-metrics)", file=sys.stderr)
+    elif args.include_groups == ["all"] and not args.exclude_groups:
+        all_metrics_mode = True
+        print("Using get_all_metrics for comprehensive analysis", file=sys.stderr)
+    elif len(args.include_groups) >= 3 and set(args.include_groups).intersection({"char", "text", "unigram", "readability"}):
+        # If at least 3 of the main module groups are requested, use get_all_metrics for efficiency
+        all_metrics_mode = True
+        print("Using get_all_metrics for comprehensive analysis (multiple module groups requested)", file=sys.stderr)
+    # Legacy compatibility check 
+    elif set(metrics_to_calculate) >= set(METRIC_GROUPS["basic"] + METRIC_GROUPS["char_type"] + 
+                                      METRIC_GROUPS["ratios"] + METRIC_GROUPS["entropy"] +
+                                      METRIC_GROUPS["segmentation"] + METRIC_GROUPS["unigram"]):
+        all_metrics_mode = True
+        print("Using get_all_metrics for comprehensive analysis (most legacy metric groups requested)", file=sys.stderr)
+    # Check if only char, unigram, and possibly readability metrics are requested
+    elif set(args.include_groups) <= set(["char", "unigram", "readability"]) and not args.exclude_groups:
+        optimized_metrics_mode = True
+        print("Using optimized character, unigram, and readability metrics (based on requested groups)", file=sys.stderr)
+        
+    # Set the analyzer based on the mode
+    if optimized_metrics_mode:
+        # Will use get_all_char_metrics and get_all_unigram_metrics directly
+        analyzer = None
+        print("Using get_all_char_metrics and get_all_unigram_metrics for maximum performance", file=sys.stderr)
+    elif all_metrics_mode:
+        # Will use get_all_metrics directly for each text
+        analyzer = None
+        print("Using get_all_metrics for efficient combined processing", file=sys.stderr)
+    elif args.use_hyper:
         # Create a HyperAnalyzer for ultra-efficient metric computation
         analyzer = cheesecloth.HyperAnalyzer(include_punctuation, case_sensitive)
         print("Using hyper-optimized analyzer for maximum performance", file=sys.stderr)
@@ -622,6 +875,7 @@ def compute_metrics_for_dataset(dataset, args, metrics_to_calculate, output_stre
         analyzer = cheesecloth.BatchProcessor(
             metrics_to_calculate, include_punctuation, case_sensitive
         )
+        print("Using standard BatchProcessor for selective metrics", file=sys.stderr)
 
     # Frequency metrics to exclude from output by default
     frequency_metrics = ["char_frequency", "unigram_frequency"]
@@ -707,10 +961,109 @@ def compute_metrics_for_dataset(dataset, args, metrics_to_calculate, output_stre
             if not batch_texts:
                 continue
 
-            batch_results = None
+            batch_results = []
 
             # Compute metrics for the entire batch at once
-            if args.use_hyper:
+            if optimized_metrics_mode:
+                # Process each text with optimized direct functions
+                for text in batch_texts:
+                    try:
+                        # Use get_all_char_metrics and get_all_unigram_metrics for optimized analysis
+                        flat_metrics = {}
+                        
+                        # Character metrics using optimized direct function
+                        char_metrics = cheesecloth.get_all_char_metrics(text)
+                        for k, v in char_metrics.items():
+                            flat_metrics[k] = v
+                            
+                        # Unigram metrics using optimized direct function
+                        unigram_metrics = cheesecloth.get_all_unigram_metrics(
+                            text, 
+                            include_punctuation=include_punctuation,
+                            case_sensitive=case_sensitive
+                        )
+                        for k, v in unigram_metrics.items():
+                            flat_metrics[k] = v
+                        
+                        # Calculate readability metrics if needed
+                        if "readability" in args.include_groups or "all" in args.include_groups:
+                            try:
+                                # For readability metrics, we need segmentation metrics too, 
+                                # so get all metrics and create AllMetrics object
+                                all_metrics_data = cheesecloth.get_all_metrics(
+                                    text, 
+                                    include_punctuation=include_punctuation,
+                                    case_sensitive=case_sensitive,
+                                    use_paragraph_processing=True
+                                )
+                                all_metrics = AllMetrics.from_dict(all_metrics_data)
+                                
+                                # Add readability metrics
+                                flat_metrics["readability_score"] = all_metrics.calculate_readability_score()
+                                flat_metrics["readability_level"] = all_metrics.get_readability_level()
+                                # Only include detailed factors if frequencies are included
+                                if args.include_frequencies:
+                                    flat_metrics["readability_factors"] = all_metrics.get_readability_assessment()
+                            except Exception as e:
+                                progress_bar.write(f"Warning: Could not calculate readability metrics in optimized mode: {e}")
+                            
+                        batch_results.append(flat_metrics)
+                    except Exception as e:
+                        progress_bar.write(f"Error computing metrics with optimized functions: {e}")
+                        # Add an empty dict to maintain index alignment
+                        batch_results.append({})
+                        
+            elif all_metrics_mode:
+                # Process each text with get_all_metrics
+                for text in batch_texts:
+                    try:
+                        # Use get_all_metrics for comprehensive analysis
+                        nested_metrics = cheesecloth.get_all_metrics(
+                            text, 
+                            include_punctuation=include_punctuation,
+                            case_sensitive=case_sensitive,
+                            use_paragraph_processing=True
+                        )
+                        
+                        # Flatten the nested dictionary for compatibility with existing code
+                        flat_metrics = {}
+                        
+                        # Character metrics
+                        for k, v in nested_metrics['character'].items():
+                            flat_metrics[k] = v
+                            
+                        # Unigram metrics
+                        for k, v in nested_metrics['unigram'].items():
+                            flat_metrics[k] = v
+                            
+                        # Segmentation metrics
+                        for k, v in nested_metrics['segmentation'].items():
+                            flat_metrics[k] = v
+                            
+                        # Pattern metrics - prefix with pattern_ to avoid name conflicts
+                        for k, v in nested_metrics['patterns'].items():
+                            # Skip internal processing metadata unless explicitly requested
+                            if k.startswith('_') and not args.include_frequencies:
+                                continue
+                            flat_metrics[f"pattern_{k}"] = v
+                        
+                        # Add readability metrics using AllMetrics wrapper
+                        try:
+                            all_metrics = AllMetrics.from_dict(nested_metrics)
+                            flat_metrics["readability_score"] = all_metrics.calculate_readability_score()
+                            flat_metrics["readability_level"] = all_metrics.get_readability_level()
+                            # Only include detailed factors if frequencies are included to avoid large output
+                            if args.include_frequencies:
+                                flat_metrics["readability_factors"] = all_metrics.get_readability_assessment()
+                        except Exception as e:
+                            progress_bar.write(f"Warning: Could not calculate readability metrics: {e}")
+                            
+                        batch_results.append(flat_metrics)
+                    except Exception as e:
+                        progress_bar.write(f"Error computing metrics with get_all_metrics: {e}")
+                        # Add an empty dict to maintain index alignment
+                        batch_results.append({})
+            elif args.use_hyper:
                 # For HyperAnalyzer
                 try:
                     if len(batch_texts) == 1:
@@ -745,6 +1098,10 @@ def compute_metrics_for_dataset(dataset, args, metrics_to_calculate, output_stre
 
             # Process results for each text in the batch
             for example_idx, metrics in zip(batch_indices, batch_results):
+                # Skip empty results (from errors)
+                if not metrics:
+                    continue
+                    
                 # Update running sums and counts for averages
                 for key, value in metrics.items():
                     if isinstance(value, bool):
@@ -764,7 +1121,7 @@ def compute_metrics_for_dataset(dataset, args, metrics_to_calculate, output_stre
                         metric_counts[key] += 1
 
                 # Filter results to only the requested metrics
-                if args.use_hyper:
+                if args.use_hyper and not all_metrics_mode:
                     # When using HyperAnalyzer, filter to only include requested metrics
                     filtered_metrics = {
                         k: v for k, v in metrics.items() if k in metrics_to_calculate
@@ -786,8 +1143,36 @@ def compute_metrics_for_dataset(dataset, args, metrics_to_calculate, output_stre
                     "record_type": "example",
                     "example_index": example_idx,
                 }
-                record.update(filtered_metrics)
-                output_stream.write(json.dumps(record) + "\n")
+                
+                # Process filtered_metrics to ensure JSON serializable
+                serializable_metrics = {}
+                for k, v in filtered_metrics.items():
+                    # Convert tuple keys to strings
+                    if isinstance(v, dict) and any(isinstance(dk, tuple) for dk in v.keys()):
+                        serializable_v = {}
+                        for dk, dv in v.items():
+                            if isinstance(dk, tuple):
+                                # Convert tuple to string representation
+                                serializable_v[str(dk)] = dv
+                            else:
+                                serializable_v[dk] = dv
+                        serializable_metrics[k] = serializable_v
+                    else:
+                        serializable_metrics[k] = v
+                
+                record.update(serializable_metrics)
+                
+                try:
+                    output_stream.write(json.dumps(record) + "\n")
+                except TypeError as e:
+                    progress_bar.write(f"Error serializing record: {e}")
+                    # Attempt more aggressive serialization fixing
+                    try:
+                        clean_record = {k: (str(v) if not isinstance(v, (int, float, bool, str, list, dict, type(None))) else v) 
+                                       for k, v in record.items()}
+                        output_stream.write(json.dumps(clean_record) + "\n")
+                    except Exception as e2:
+                        progress_bar.write(f"Failed to serialize record even after cleaning: {e2}")
 
             # Flush after each batch
             output_stream.flush()
@@ -891,11 +1276,59 @@ def analyze_dataset_main(args):
 
 def list_available_metrics():
     """Print available metric groups and their metrics, then exit."""
-    print("Available metric groups:")
-    for group, metrics in METRIC_GROUPS.items():
-        print(f"\n{group}:")
-        for metric in metrics:
-            print(f"  - {metric}")
+    # Define order of groups for display
+    primary_groups = ["char", "text", "unigram", "readability", "compression", "zipf", "token"]
+    # Note: "patterns" group is excluded from defaults due to slower performance
+    utility_groups = ["frequency"]
+    legacy_groups = ["basic", "char_type", "ratios", "entropy", "segmentation"]
+    
+    print("Available metric groups based on Rust library structure:")
+    print("------------------------------------------------------")
+    
+    # Print primary groups first
+    for group in primary_groups:
+        if group in METRIC_GROUPS:
+            metrics = METRIC_GROUPS[group]
+            print(f"\n{group}: ({len(metrics)} metrics)")
+            for metric in metrics:
+                print(f"  - {metric}")
+    
+    # Print utility groups next
+    print("\nUtility groups:")
+    print("-------------")
+    for group in utility_groups:
+        if group in METRIC_GROUPS:
+            metrics = METRIC_GROUPS[group]
+            print(f"\n{group}: ({len(metrics)} metrics)")
+            for metric in metrics:
+                print(f"  - {metric}")
+    
+    # Print legacy groups last
+    print("\nLegacy groups (maintained for backward compatibility):")
+    print("--------------------------------------------------")
+    for group in legacy_groups:
+        if group in METRIC_GROUPS:
+            metrics = METRIC_GROUPS[group]
+            print(f"\n{group}: ({len(metrics)} metrics)")
+            for metric in metrics:
+                print(f"  - {metric}")
+                
+    # Print performance notes and tips
+    print("\nPerformance notes:")
+    print("----------------")
+    print("- 'patterns' group is not included in the 'all' group by default due to slow performance")
+    print("- To include pattern metrics, add '--include-groups patterns' explicitly")
+    print("- For maximum performance, use '--use-optimized-metrics' to use get_all_char_metrics and get_all_unigram_metrics directly")
+    print("- For comprehensive metrics, use '--use-all-metrics' to force using the optimized get_all_metrics function")
+    print("\nCommon usage examples:")
+    print("------------------")
+    print("Basic metrics:         --include-groups char text unigram")
+    print("Char & unigram only:   --include-groups char unigram")
+    print("With readability:      --include-groups char text unigram readability")
+    print("Optimized core metrics: --use-optimized-metrics")
+    print("All metrics:           --include-groups all")
+    print("With pattern metrics:   --include-groups all patterns")
+    
     sys.exit(0)
 
 
@@ -946,17 +1379,20 @@ def main():
     )
 
     # Metric group selection
+    primary_groups = ["char", "text", "unigram", "readability", "compression", "zipf", "token"]
+    # Note: "patterns" group is excluded from defaults due to slower performance
     parser.add_argument(
         "--include-groups",
         nargs="+",
         default=["all"],
-        help=f"Metric groups to include (default: all). Available groups: {', '.join(METRIC_GROUPS.keys())}",
+        help=f"Metric groups to include (default: all except 'patterns'). Primary groups: {', '.join(primary_groups)}. "
+             f"Use --list-metrics to see all available groups. Note: 'patterns' group must be explicitly included due to performance impact.",
     )
     parser.add_argument(
         "--exclude-groups",
         nargs="+",
         default=[],
-        help="Metric groups to exclude (default: none)",
+        help="Metric groups to exclude (default: none). Applied after --include-groups.",
     )
 
     # Output options
@@ -1004,6 +1440,16 @@ def main():
         "--use-hyper",
         action="store_true",
         help="Use the hyper-optimized analyzer for maximum performance",
+    )
+    parser.add_argument(
+        "--use-all-metrics",
+        action="store_true",
+        help="Force using the get_all_metrics function which efficiently computes character, unigram, segmentation, and pattern metrics in one pass",
+    )
+    parser.add_argument(
+        "--use-optimized-metrics",
+        action="store_true",
+        help="Use optimized get_all_char_metrics and get_all_unigram_metrics functions directly, without pattern metrics for maximum performance",
     )
 
     # Profiling options
