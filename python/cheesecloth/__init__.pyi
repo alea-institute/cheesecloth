@@ -17,7 +17,125 @@ For detailed documentation on each function and parameter,
 refer to the actual implementation in Rust with PyO3 bindings.
 """
 
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Set, Any
+
+# BatchProcessor class for efficient batch processing of text metrics
+class BatchProcessor:
+    """
+    A configurable processor for computing selected text metrics on batches of documents.
+    
+    This class allows for selective computation of metrics to optimize performance
+    when only specific metrics are needed.
+    
+    Attributes:
+        enabled_metrics: Set of metric names to compute
+    """
+    
+    enabled_metrics: Set[str]
+    
+    def __init__(self, metrics: List[str], include_punctuation: bool = True, case_sensitive: bool = False) -> None:
+        """
+        Initialize a new BatchProcessor with specified metrics enabled.
+        
+        Args:
+            metrics: List of metric names to compute
+            include_punctuation: Whether to include punctuation in unigram metrics
+            case_sensitive: Whether to treat text as case-sensitive for unigram metrics
+        """
+        ...
+    
+    def compute_metrics(self, text: str) -> Dict[str, Any]:
+        """
+        Compute all enabled metrics for a single text.
+        
+        Args:
+            text: The input text to analyze
+            
+        Returns:
+            Dictionary mapping metric names to their values
+        """
+        ...
+    
+    def compute_batch_metrics(self, texts: List[str]) -> List[Dict[str, Any]]:
+        """
+        Compute metrics for a batch of texts.
+        
+        Args:
+            texts: List of input texts to analyze
+            
+        Returns:
+            List of dictionaries, each mapping metric names to their values for one text
+        """
+        ...
+
+# HyperAnalyzer class for high-performance single-pass metrics calculation
+class HyperAnalyzer:
+    """
+    A high-performance analyzer that calculates all metrics in a single text traversal.
+    
+    This class provides the most efficient approach for comprehensive text analysis
+    by computing all metrics in a single pass, which is ideal when most or all metrics
+    are needed.
+    
+    Attributes:
+        include_punctuation: Whether to include punctuation in unigram metrics
+        case_sensitive: Whether to treat text as case-sensitive for unigram metrics
+    """
+    
+    include_punctuation: bool
+    case_sensitive: bool
+    
+    def __init__(self, include_punctuation: bool = True, case_sensitive: bool = False) -> None:
+        """
+        Initialize a new HyperAnalyzer with specified options.
+        
+        Args:
+            include_punctuation: Whether to include punctuation in unigram metrics
+            case_sensitive: Whether to treat text as case-sensitive for unigram metrics
+        """
+        ...
+    
+    def calculate_char_metrics(self, text: str) -> Dict[str, Any]:
+        """
+        Calculate only character metrics for a text.
+        
+        Although this method uses the full implementation internally, it only returns
+        character-related metrics in the result dictionary.
+        
+        Args:
+            text: The input text to analyze
+            
+        Returns:
+            Dictionary of character metrics
+        """
+        ...
+    
+    def calculate_all_metrics(self, text: str) -> Dict[str, Any]:
+        """
+        Calculate all metrics for a text (character, segmentation, and unigram).
+        
+        This method performs a single pass through the text to compute all metrics
+        at once, which is more efficient than calculating them separately.
+        
+        Args:
+            text: The input text to analyze
+            
+        Returns:
+            Dictionary containing all metrics
+        """
+        ...
+    
+    def calculate_batch_metrics(self, texts: List[str]) -> List[Dict[str, Any]]:
+        """
+        Calculate metrics for a batch of texts.
+        
+        Args:
+            texts: List of input texts to analyze
+            
+        Returns:
+            List of dictionaries, each containing all metrics for one text
+        """
+        ...
 
 # Character count functions
 def count_chars(text: str) -> int:
@@ -903,5 +1021,66 @@ def get_all_unigram_metrics(
 
     Returns:
         Dictionary containing all unigram metrics
+    """
+    ...
+
+def get_all_pattern_metrics(
+    text: str, use_paragraph_processing: bool = True, max_segment_size: int = 4096
+) -> Dict[str, Union[int, float, bool]]:
+    """
+    Calculate all pattern-based metrics efficiently using optimized processing.
+    
+    This function provides pattern-based statistics such as question counts, factual statement detection,
+    and content type indicators using regex pattern matching. For large texts, it can process by paragraph
+    to improve performance.
+    
+    If a paragraph is longer than max_segment_size bytes, it will be further broken down
+    into line segments for even more efficient processing.
+    
+    Args:
+        text: The input text to analyze
+        use_paragraph_processing: Whether to process text by paragraphs for better performance (default: True)
+        max_segment_size: Maximum size in bytes for text segments before breaking them down (default: 4096)
+    
+    Returns:
+        Dictionary containing pattern metrics like question counts, copyright mentions, etc.
+    """
+    ...
+
+def get_all_metrics(
+    text: str, 
+    include_punctuation: bool = True, 
+    case_sensitive: bool = False,
+    use_paragraph_processing: bool = True,
+    max_segment_size: int = 4096
+) -> Dict[
+    str, 
+    Dict[
+        str,
+        Union[int, float, bool, Dict[str, float], Dict[str, int]]
+    ]
+]:
+    """
+    Calculate all metrics including character, unigram, segmentation, and pattern-based metrics.
+    
+    This comprehensive function minimizes round trips from Rust to Python by calculating all
+    metrics in a single call. It returns a nested dictionary with the following sections:
+    - 'character': Character-level metrics (counts, ratios, entropy)
+    - 'unigram': Word-level metrics (token counts, type-token ratio)
+    - 'segmentation': Text structure metrics (paragraphs, lines, sentences)
+    - 'patterns': Pattern-based metrics (questions, copyright mentions)
+    
+    By default, pattern-based metrics use paragraph processing for efficiency, with large paragraphs
+    further broken down into line segments for better performance.
+    
+    Args:
+        text: The input text to analyze
+        include_punctuation: Whether to include punctuation for unigram metrics (default: True)
+        case_sensitive: Whether to treat text as case-sensitive for unigram metrics (default: False)
+        use_paragraph_processing: Whether to use paragraph-based processing for patterns (default: True)
+        max_segment_size: Maximum segment size in bytes before breaking down paragraphs (default: 4096)
+    
+    Returns:
+        Nested dictionary containing all metrics organized by category
     """
     ...
