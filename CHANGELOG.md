@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.1 (2025-04-15)
+
+### Improvements
+- Added package configuration to exclude test files and example data from distributions
+- Created MANIFEST.in to control Python package contents
+- Added Cargo package exclusions for cleaner builds
+
 ## v0.2.0 (2025-04-15)
 
 ### Features

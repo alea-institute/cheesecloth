@@ -343,6 +343,7 @@ particularly [IMPLEMENTED_METRICS.md](docs/IMPLEMENTED_METRICS.md) for a complet
 
 ## 📊 Versions
 
+- **v0.2.1** (2025-04-15): Added package configuration for clean distributions
 - **v0.2.0** (2025-04-15): Added readability metrics, typed wrappers, optimized metrics mode, improved pattern matching
 - **v0.1.0** (2025-04-14): Initial release with comprehensive text metrics implementation
 
