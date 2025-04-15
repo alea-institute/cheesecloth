@@ -48,6 +48,7 @@ tests = [
 [tool.maturin]
 python-source = "python"
 features = ["pyo3/extension-module"]
+exclude = ["tests/*", "python/tests/*", "data/*", "examples/*", "**/.pytest_cache", "**/__pycache__"]
 
 [dependency-groups]
 dev = [
