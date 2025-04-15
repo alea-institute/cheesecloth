@@ -939,6 +939,52 @@ fn count_question_strings(text: &str) -> PyResult<usize> {
     }
 }
 
+/// Counts interrogative question forms in text (who, what, when, where, why, how, etc.)
+/// Only matches questions that begin with properly capitalized interrogative words
+#[pyfunction]
+fn count_interrogative_questions(text: &str) -> PyResult<usize> {
+    match patterns::count_interrogative_questions(text) {
+        Ok(count) => Ok(count),
+        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            e.to_string(),
+        )),
+    }
+}
+
+/// Counts complex interrogative phrases with expanded variations
+/// Matches a comprehensive set of question patterns like "How many", "What can", etc.
+#[pyfunction]
+fn count_complex_interrogatives(text: &str) -> PyResult<usize> {
+    match patterns::count_complex_interrogatives(text) {
+        Ok(count) => Ok(count),
+        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            e.to_string(),
+        )),
+    }
+}
+
+/// Counts factual statements in text (often seen in educational content)
+#[pyfunction]
+fn count_factual_statements(text: &str) -> PyResult<usize> {
+    match patterns::count_factual_statements(text) {
+        Ok(count) => Ok(count),
+        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            e.to_string(),
+        )),
+    }
+}
+
+/// Counts logical reasoning and argumentation expressions in text
+#[pyfunction]
+fn count_logical_reasoning(text: &str) -> PyResult<usize> {
+    match patterns::count_logical_reasoning(text) {
+        Ok(count) => Ok(count),
+        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            e.to_string(),
+        )),
+    }
+}
+
 /// Checks if text contains code-like constructs
 #[pyfunction]
 fn contains_code_characters(text: &str) -> PyResult<bool> {
@@ -1042,6 +1088,260 @@ fn get_zipf_metrics(
     Ok(dict.into())
 }
 
+/// Calculates all pattern-based metrics efficiently by leveraging paragraph processing for large texts.
+/// 
+/// This function provides pattern-based statistics such as question counts, factual statement detection,
+/// and content type indicators using regex pattern matching. For large texts, it can process by paragraph
+/// to improve performance.
+/// 
+/// If a paragraph is longer than max_segment_size bytes (default 4096), it will be further broken down
+/// into line segments for even more efficient processing.
+#[pyfunction]
+#[pyo3(signature = (text, use_paragraph_processing=true, max_segment_size=4096))]
+fn get_all_pattern_metrics(
+    py: Python,
+    text: &str,
+    use_paragraph_processing: bool,
+    max_segment_size: usize,
+) -> PyResult<PyObject> {
+    // Initialize the pattern metrics dictionary
+    let pattern_section = PyDict::new(py);
+    
+    // For large texts, process by paragraph when requested
+    if use_paragraph_processing {
+        // Split the text into paragraphs
+        let paragraphs = text::segmentation::split_paragraphs(text);
+        
+        // Record that we used paragraph processing
+        pattern_section.set_item("_used_paragraph_processing", true)?;
+        pattern_section.set_item("_paragraph_count", paragraphs.len())?;
+        
+        // Process the paragraphs, potentially breaking them down further
+        let mut processed_segments = 0;
+        let mut large_paragraphs = 0;
+        
+        // For each metric we need to count, initialize a counter
+        let mut question_count = 0;
+        let mut interrogative_count = 0;
+        let mut complex_interrogative_count = 0;
+        let mut factual_statement_count = 0;
+        let mut logical_reasoning_count = 0;
+        let mut section_heading_count = 0;
+        let mut copyright_count = 0;
+        let mut rights_reserved_count = 0;
+        let mut bullet_count = 0;
+        let mut ellipsis_count = 0;
+        
+        // Process each paragraph, optionally breaking down large ones
+        for paragraph in &paragraphs {
+            processed_segments += 1;
+            
+            if paragraph.len() > max_segment_size {
+                // This paragraph is too large - break it down into lines
+                large_paragraphs += 1;
+                let lines: Vec<String> = paragraph.lines().map(|s| s.to_string()).collect();
+                
+                // Track extremely long lines that need further chunking
+                let mut extremely_long_lines = 0;
+                
+                // Process each line separately
+                for line in &lines {
+                    if line.len() > max_segment_size {
+                        // Even this line is too long - break it into fixed-size chunks
+                        extremely_long_lines += 1;
+                        
+                        // Process in chunks of max_segment_size
+                        let mut start = 0;
+                        
+                        while start < line.len() {
+                            // Calculate end position, ensuring we stay on char boundaries
+                            let candidate_end = std::cmp::min(start + max_segment_size, line.len());
+                            
+                            // Find the closest valid char boundary (UTF-8 safe)
+                            let mut end = candidate_end;
+                            while end > start && !line.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            
+                            // Process this chunk if we have enough characters
+                            // Skip chunks smaller than 10 chars as they're unlikely to match patterns
+                            if end - start >= 10 {
+                                let chunk = &line[start..end];
+                                
+                                // Count patterns in this chunk
+                                question_count += patterns::QUESTION_REGEX.find_iter(chunk).count();
+                                interrogative_count += patterns::INTERROGATIVE_REGEX.find_iter(chunk).count();
+                                complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(chunk).count();
+                                factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX.find_iter(chunk).count();
+                                logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX.find_iter(chunk).count();
+                                section_heading_count += patterns::SECTION_HEADING_REGEX.find_iter(chunk).count();
+                                copyright_count += patterns::COPYRIGHT_REGEX.find_iter(chunk).count();
+                                rights_reserved_count += patterns::RIGHTS_RESERVED_REGEX.find_iter(chunk).count();
+                                bullet_count += patterns::BULLET_REGEX.find_iter(chunk).count();
+                                ellipsis_count += patterns::ELLIPSIS_REGEX.find_iter(chunk).count();
+                            }
+                            
+                            // Move to next chunk
+                            start = end;
+                        }
+                    } else {
+                        // Line is reasonably sized - process normally
+                        question_count += patterns::QUESTION_REGEX.find_iter(line).count();
+                        interrogative_count += patterns::INTERROGATIVE_REGEX.find_iter(line).count();
+                        complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(line).count();
+                        factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX.find_iter(line).count();
+                        logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX.find_iter(line).count();
+                        section_heading_count += patterns::SECTION_HEADING_REGEX.find_iter(line).count();
+                        copyright_count += patterns::COPYRIGHT_REGEX.find_iter(line).count();
+                        rights_reserved_count += patterns::RIGHTS_RESERVED_REGEX.find_iter(line).count();
+                        bullet_count += patterns::BULLET_REGEX.find_iter(line).count();
+                        ellipsis_count += patterns::ELLIPSIS_REGEX.find_iter(line).count();
+                    }
+                }
+                
+                // Add metadata about extremely long lines
+                pattern_section.set_item("_extremely_long_lines_chunked", extremely_long_lines)?;
+            } else {
+                // Normal-sized paragraph - process it as a single unit
+                question_count += patterns::QUESTION_REGEX.find_iter(paragraph).count();
+                interrogative_count += patterns::INTERROGATIVE_REGEX.find_iter(paragraph).count();
+                complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(paragraph).count();
+                factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX.find_iter(paragraph).count();
+                logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX.find_iter(paragraph).count();
+                section_heading_count += patterns::SECTION_HEADING_REGEX.find_iter(paragraph).count();
+                copyright_count += patterns::COPYRIGHT_REGEX.find_iter(paragraph).count();
+                rights_reserved_count += patterns::RIGHTS_RESERVED_REGEX.find_iter(paragraph).count();
+                bullet_count += patterns::BULLET_REGEX.find_iter(paragraph).count();
+                ellipsis_count += patterns::ELLIPSIS_REGEX.find_iter(paragraph).count();
+            }
+        }
+        
+        // Add processing metadata
+        pattern_section.set_item("_segments_processed", processed_segments)?;
+        pattern_section.set_item("_large_paragraphs_broken_down", large_paragraphs)?;
+        pattern_section.set_item("_max_segment_size", max_segment_size)?;
+        
+        // Add all the metric counts
+        pattern_section.set_item("question_count", question_count)?;
+        pattern_section.set_item("interrogative_question_count", interrogative_count)?;
+        pattern_section.set_item("complex_interrogative_count", complex_interrogative_count)?;
+        pattern_section.set_item("factual_statement_count", factual_statement_count)?;
+        pattern_section.set_item("logical_reasoning_count", logical_reasoning_count)?;
+        pattern_section.set_item("section_heading_count", section_heading_count)?;
+        pattern_section.set_item("copyright_mention_count", copyright_count)?;
+        pattern_section.set_item("rights_reserved_count", rights_reserved_count)?;
+        pattern_section.set_item("bullet_count", bullet_count)?;
+        pattern_section.set_item("ellipsis_count", ellipsis_count)?;
+        
+        // Some patterns need to be checked in the full text for accuracy
+        let contains_code = patterns::CODE_REGEX.is_match(text);
+        pattern_section.set_item("contains_code", contains_code)?;
+        
+        // Calculate bullet/ellipsis ratio
+        let total_lines = text.lines().count();
+        let bullet_ellipsis_ratio = if total_lines > 0 {
+            (bullet_count + ellipsis_count) as f64 / total_lines as f64
+        } else {
+            0.0
+        };
+        pattern_section.set_item("bullet_ellipsis_ratio", bullet_ellipsis_ratio)?;
+        
+    } else {
+        // Process the full text at once (original method)
+        pattern_section.set_item("_used_paragraph_processing", false)?;
+        
+        let question_count = patterns::QUESTION_REGEX.find_iter(text).count();
+        pattern_section.set_item("question_count", question_count)?;
+        
+        let interrogative_count = patterns::INTERROGATIVE_REGEX.find_iter(text).count();
+        pattern_section.set_item("interrogative_question_count", interrogative_count)?;
+        
+        let complex_interrogative_count = patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(text).count();
+        pattern_section.set_item("complex_interrogative_count", complex_interrogative_count)?;
+        
+        let factual_statement_count = patterns::FACTUAL_STATEMENT_REGEX.find_iter(text).count();
+        pattern_section.set_item("factual_statement_count", factual_statement_count)?;
+        
+        let logical_reasoning_count = patterns::LOGICAL_REASONING_REGEX.find_iter(text).count();
+        pattern_section.set_item("logical_reasoning_count", logical_reasoning_count)?;
+        
+        let section_heading_count = patterns::SECTION_HEADING_REGEX.find_iter(text).count();
+        pattern_section.set_item("section_heading_count", section_heading_count)?;
+        
+        let copyright_count = patterns::COPYRIGHT_REGEX.find_iter(text).count();
+        pattern_section.set_item("copyright_mention_count", copyright_count)?;
+        
+        let rights_reserved_count = patterns::RIGHTS_RESERVED_REGEX.find_iter(text).count();
+        pattern_section.set_item("rights_reserved_count", rights_reserved_count)?;
+        
+        let contains_code = patterns::CODE_REGEX.is_match(text);
+        pattern_section.set_item("contains_code", contains_code)?;
+        
+        let bullet_count = patterns::BULLET_REGEX.find_iter(text).count();
+        pattern_section.set_item("bullet_count", bullet_count)?;
+        
+        let ellipsis_count = patterns::ELLIPSIS_REGEX.find_iter(text).count();
+        pattern_section.set_item("ellipsis_count", ellipsis_count)?;
+        
+        // Calculate bullet/ellipsis ratio manually to avoid another line counting pass
+        let total_lines = text.lines().count();
+        let bullet_ellipsis_ratio = if total_lines > 0 {
+            (bullet_count + ellipsis_count) as f64 / total_lines as f64
+        } else {
+            0.0
+        };
+        pattern_section.set_item("bullet_ellipsis_ratio", bullet_ellipsis_ratio)?;
+    }
+    
+    Ok(pattern_section.into())
+}
+
+/// Calculates all metrics including pattern-based metrics with optimized regex matching
+/// to minimize processing time and reduce Rust-Python round trips.
+/// 
+/// By default, pattern-based metrics use paragraph processing for efficiency, with large paragraphs 
+/// (>4096 bytes) further broken down into line segments for better performance.
+#[pyfunction]
+#[pyo3(signature = (text, include_punctuation=true, case_sensitive=false, use_paragraph_processing=true, max_segment_size=4096))]
+fn get_all_metrics(
+    py: Python,
+    text: &str,
+    include_punctuation: bool,
+    case_sensitive: bool,
+    use_paragraph_processing: bool,
+    max_segment_size: usize,
+) -> PyResult<PyObject> {
+    // Create a new dictionary for results
+    let result_dict = PyDict::new(py);
+    
+    // A simpler approach: use directly returned dictionaries 
+    // Get character metrics
+    let char_metrics = get_all_char_metrics(py, text)?;
+    result_dict.set_item("character", char_metrics)?;
+    
+    // Get unigram metrics
+    let unigram_metrics = get_all_unigram_metrics(
+        py, text, include_punctuation, case_sensitive
+    )?;
+    result_dict.set_item("unigram", unigram_metrics)?;
+    
+    // Add segmentation metrics
+    let segmentation_section = PyDict::new(py);
+    segmentation_section.set_item("line_count", text::segmentation::count_lines(text))?;
+    segmentation_section.set_item("average_line_length", text::segmentation::average_line_length(text))?;
+    segmentation_section.set_item("paragraph_count", text::segmentation::count_paragraphs(text))?;
+    segmentation_section.set_item("average_paragraph_length", text::segmentation::average_paragraph_length(text))?;
+    segmentation_section.set_item("average_sentence_length", text::segmentation::average_sentence_length(text))?;
+    result_dict.set_item("segmentation", segmentation_section)?;
+    
+    // Get all pattern metrics
+    let pattern_metrics = get_all_pattern_metrics(py, text, use_paragraph_processing, max_segment_size)?;
+    result_dict.set_item("patterns", pattern_metrics)?;
+    
+    // Return the complete dictionary
+    Ok(result_dict.into())
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1112,6 +1412,8 @@ fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Combined metrics
     m.add_function(wrap_pyfunction!(combined_char_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_char_metrics, m)?)?;
+    m.add_function(wrap_pyfunction!(get_all_pattern_metrics, m)?)?;
+    m.add_function(wrap_pyfunction!(get_all_metrics, m)?)?;
 
     // Text segmentation functions
     m.add_function(wrap_pyfunction!(split_words, m)?)?;
@@ -1163,6 +1465,10 @@ fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_rights_reserved, m)?)?;
     m.add_function(wrap_pyfunction!(count_section_strings, m)?)?;
     m.add_function(wrap_pyfunction!(count_question_strings, m)?)?;
+    m.add_function(wrap_pyfunction!(count_interrogative_questions, m)?)?;
+    m.add_function(wrap_pyfunction!(count_complex_interrogatives, m)?)?;
+    m.add_function(wrap_pyfunction!(count_factual_statements, m)?)?;
+    m.add_function(wrap_pyfunction!(count_logical_reasoning, m)?)?;
     m.add_function(wrap_pyfunction!(contains_code_characters, m)?)?;
     m.add_function(wrap_pyfunction!(bullet_or_ellipsis_lines_ratio, m)?)?;
     m.add_function(wrap_pyfunction!(contains_blacklist_substring, m)?)?;
