@@ -339,7 +339,14 @@ You can use `--include-groups all` (default) to include all metrics or exclude s
 ## 📋 Documentation
 
 For more information, check out the documentation in the [docs](docs/) directory,
-particularly [OUTLINE.md](docs/METRICS) for a complete list of available metrics.
+particularly [IMPLEMENTED_METRICS.md](docs/IMPLEMENTED_METRICS.md) for a complete list of available metrics.
+
+## 📊 Versions
+
+- **v0.2.0** (2025-04-15): Added readability metrics, typed wrappers, optimized metrics mode, improved pattern matching
+- **v0.1.0** (2025-04-14): Initial release with comprehensive text metrics implementation
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 
 ## Citation
