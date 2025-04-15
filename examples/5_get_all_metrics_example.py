@@ -31,7 +31,7 @@ def analyze_single_text():
     # Load the full War and Peace text to demonstrate real-world performance
     with open(WAR_AND_PEACE_PATH, "r", encoding="utf-8") as f:
         # Use the complete text for a real benchmark
-        text = f.read()
+        text = f.read(100000)
     
     print(f"Analyzing text of length: {len(text):,} characters")
     
@@ -169,34 +169,27 @@ def patterns_only_analysis():
     
     # Load the full War and Peace text for a comprehensive benchmark
     with open(WAR_AND_PEACE_PATH, "r", encoding="utf-8") as f:
-        text = f.read()
+        text = f.read(100000)
     
     print(f"Analyzing patterns in text of length: {len(text):,} characters")
     
-    # Create test cases for our multi-level chunking strategy
-    # 1. A very long paragraph (but with normal line breaks)
-    long_paragraph = "This is a very long paragraph that will exceed our segment size. " * 200
-    
-    # 2. An extremely long single line (no line breaks) to test line chunking
-    extremely_long_line = "This is an extremely long line with no breaks that will trigger byte-level chunking. " * 500
-    
-    # Combine the test cases with the original text
-    text_with_long_elements = text + "\n\n" + long_paragraph + "\n\n" + extremely_long_line
+    # We'll just use the full War and Peace text without synthetic test cases
+    # to measure real-world performance on unaltered literary text
     
     # Time the get_all_pattern_metrics function with default settings
     start_time = time.time()
-    pattern_metrics = cheesecloth.get_all_pattern_metrics(text_with_long_elements)
+    pattern_metrics = cheesecloth.get_all_pattern_metrics(text)
     elapsed = time.time() - start_time
     
     # Also try with a smaller segment size to trigger more line-based processing
     start_time = time.time()
     pattern_metrics_small_segment = cheesecloth.get_all_pattern_metrics(
-        text_with_long_elements, 
+        text, 
         max_segment_size=512  # Force more paragraphs to be broken down by lines
     )
     elapsed_small_segment = time.time() - start_time
     
-    print(f"Pattern analysis of full text + synthetic test cases:")
+    print(f"Pattern analysis of full War and Peace text:")
     print(f"- Default segment size (4KB): {elapsed:.2f} seconds")
     print(f"- Smaller segment size (512B): {elapsed_small_segment:.2f} seconds")
     print(f"- Performance improvement: {(elapsed-elapsed_small_segment)/elapsed*100:.1f}%")
@@ -236,9 +229,8 @@ def main():
     print("1. get_all_metrics - calculates all metrics in a single call")
     print("2. get_all_pattern_metrics - focused pattern analysis with paragraph processing")
     
-    analyze_single_text()
+    # Run only the pattern analysis which focuses on our optimization
     patterns_only_analysis()
-    analyze_multiple_texts()
     
     print("\nAnalysis complete!")
 

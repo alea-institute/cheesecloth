@@ -43,10 +43,13 @@ Cheesecloth is currently in Phase 2 of development:
 - **Corpus Filtering**: Statistical methods for efficiently filtering large-scale text corpora
 - **High Performance**: Core algorithms implemented in Rust for maximum speed and throughput
 - **Comprehensive Metrics**: 100+ metrics from character-level to advanced statistical measures
+- **Combined Analysis**: Efficient all-in-one `get_all_metrics` method optimized for large texts
+- **Typed Interface**: Type-safe Python classes for metrics with IDE completion and convenience methods
 - **Flexible APIs**: Both high-level convenience functions and low-level customizable components
 - **LLM Integration**: Support for machine learning tokenizers (GPT-2, BERT, etc.)
 - **Statistical Analysis**: Tools for analyzing metric distributions across corpus samples
 - **Minimal Dependencies**: Lightweight core with optional integrations
+- **Adaptive Processing**: Smart text segmentation for optimized pattern matching on large docs
 
 ## 📦 Installation
 
@@ -130,6 +133,128 @@ burstiness = cheesecloth.calculate_burstiness(text, top_words)
 print(f"Burstiness of top words: {burstiness:.2f}")
 ```
 
+### Example 1C: Comprehensive Analysis with get_all_metrics
+
+```python
+import cheesecloth
+import time
+
+# Text sample with a variety of patterns
+text = """
+Copyright © 2025 ALEA Institute. All rights reserved.
+
+Section 1: Introduction to Natural Language Processing
+
+Natural language processing (NLP) is a field that combines linguistics and AI.
+How does machine learning relate to language understanding?
+Why have transformer models become so popular in recent years?
+
+What are the fundamental challenges in processing human language?
+- Ambiguity in meaning
+- Context-dependent interpretation
+- Cultural references and implications
+
+Section 2: Advanced Applications
+
+When we consider the application of LLMs to legal analysis, what are the key 
+copyright considerations that must be addressed? How can we ensure fair use
+while maintaining the integrity of proprietary content?
+
+© 2025 Example content for demonstration purposes.
+"""
+
+# Get all metrics with a single function call (most efficient)
+start = time.time()
+all_metrics = cheesecloth.get_all_metrics(text)
+end = time.time()
+
+print(f"All metrics calculated in {(end-start)*1000:.2f}ms")
+
+# Character metrics
+print(f"\nCharacter metrics:")
+print(f"Character entropy: {all_metrics['character']['char_entropy']}")
+print(f"ASCII ratio: {all_metrics['character']['ascii_ratio']:.2f}")
+print(f"Letter count: {all_metrics['character']['letter_count']}")
+
+# Unigram metrics
+print(f"\nUnigram metrics:")
+print(f"Token entropy: {all_metrics['unigram']['token_entropy']}")
+print(f"Type-token ratio: {all_metrics['unigram']['type_token_ratio']:.2f}")
+
+# Pattern metrics
+print(f"\nPattern metrics:")
+print(f"Copyright mentions: {all_metrics['patterns']['copyright_mention_count']}")
+print(f"Section headings: {all_metrics['patterns']['section_heading_count']}")
+print(f"Question strings: {all_metrics['patterns']['question_count']}")
+print(f"Complex questions: {all_metrics['patterns']['complex_interrogative_count']}")
+
+# Segmentation metrics
+print(f"\nSegmentation metrics:")
+print(f"Paragraph count: {all_metrics['segmentation']['paragraph_count']}")
+print(f"Average line length: {all_metrics['segmentation']['average_line_length']:.2f}")
+print(f"Average paragraph length: {all_metrics['segmentation']['average_paragraph_length']:.2f}")
+
+# Processing metadata
+print(f"\nProcessing info:")
+print(f"Used paragraph processing: {all_metrics['patterns']['_used_paragraph_processing']}")
+print(f"Large paragraphs processed: {all_metrics['patterns'].get('_large_paragraphs_broken_down', 0)}")
+```
+
+### Example 1D: Type-Safe Metrics with Object Interface
+
+```python
+import cheesecloth
+from cheesecloth.tokenized_metrics import AllMetrics, CharMetrics
+
+# Text sample with complex patterns
+text = """
+Copyright © 2025 ALEA Institute. All rights reserved.
+
+Section 1: Introduction to Natural Language Processing
+
+What are the fundamental challenges in processing human language?
+How can large language models understand context effectively?
+"""
+
+# Using the type-safe wrapper classes for better IDE support and attribute access
+all_metrics_dict = cheesecloth.get_all_metrics(text)
+metrics = AllMetrics.from_dict(all_metrics_dict)
+
+# Now we have proper type safety and attribute access
+print(f"Character count: {metrics.character.char_count}")
+print(f"Letter count: {metrics.character.letter_count}")
+print(f"Is mostly ASCII: {metrics.character.is_mostly_ascii}")
+
+# Pattern metrics with convenience properties
+print(f"Copyright mentions: {metrics.patterns.copyright_mention_count}")
+print(f"Has copyright notices: {metrics.patterns.has_copyright_notices}")
+print(f"Complex questions: {metrics.patterns.complex_interrogative_count}")
+print(f"Is educational content: {metrics.patterns.is_educational}")
+
+# Text segmentation analysis
+print(f"Paragraph count: {metrics.segmentation.paragraph_count}")
+print(f"Simple readability: {metrics.segmentation.simple_readability_assessment}")
+
+# Comprehensive readability assessment
+print(f"Readability score: {metrics.calculate_readability_score():.2f}")
+print(f"Readability level: {metrics.get_readability_level()}")
+
+# Get detailed readability assessment with contributing factors
+readability = metrics.get_readability_assessment()
+print(f"Word complexity: {readability['factors']['word_complexity']['raw_value']:.2f}")
+print(f"Sentence complexity: {readability['factors']['sentence_complexity']['raw_value']:.2f}")
+print(f"Vocabulary complexity: {readability['factors']['vocabulary_complexity']['raw_value']:.2f}")
+
+# Get a high-level summary of key metrics
+summary = metrics.summary()
+print(f"Summary: {summary}")
+
+# Character metrics can also be used independently
+char_metrics_dict = cheesecloth.get_all_char_metrics("Hello, world!")
+char_metrics = CharMetrics.from_dict(char_metrics_dict)
+print(f"ASCII ratio: {char_metrics.ascii_ratio:.2f}")
+```
+
 ### Example 2: Using the CLI on Data Files and Datasets
 
 Cheesecloth's CLI provides several ways to analyze text data. Here are some common use cases:
@@ -193,6 +318,9 @@ uv run python3 -m cheesecloth.cli data/usc-1000.jsonl.gz --limit 100
 
 # Use optimized analyzer for faster processing
 uv run python3 -m cheesecloth.cli data/usc-1000.jsonl.gz --use-hyper
+
+# Use get_all_metrics for comprehensive analysis
+uv run python3 -m cheesecloth.cli data/usc-1000.jsonl.gz --use-all-metrics
 ```
 
 Available metric groups include:
