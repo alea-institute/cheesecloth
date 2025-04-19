@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.2 (2025-04-19)
+
+### Features
+- Added Unicode category trigram analysis for deeper text structure insights
+- Implemented advanced character type transition metrics
+- Enhanced `CharMetrics` class with trigram support and new convenience properties
+- Improved batch processing with parallel execution capabilities
+- Added comprehensive README with clear examples, badges, and navigation links
+
+### Improvements
+- Added type stubs for missing trigram functions in `__init__.pyi`
+- Optimized unigram frequency analysis and improved bigram handling
+- Enhanced pattern matching with more efficient regex implementations
+- Expanded test coverage for Unicode category trigrams
+
+### Documentation
+- Reorganized README.md for better clarity, usability and PyPI presentation
+- Added badges for PyPI version and license information
+- Improved examples with verified, working code snippets and expected outputs
+- Enhanced code documentation with better type annotations
+
 ## v0.2.1 (2025-04-15)
 
 ### Improvements

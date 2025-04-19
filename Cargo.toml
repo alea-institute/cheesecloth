@@ -1,6 +1,6 @@
 [package]
 name = "cheesecloth"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["ALEA Institute <hello@aleainstitute.ai>"]
 edition = "2021"
 description = "High-performance text metrics and filtering for large-scale corpora and pretrain curation"

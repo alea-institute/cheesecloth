@@ -78,7 +78,40 @@ for i, metrics in enumerate(results):
 """
 
 # Import all Rust binding functions
-from .cheesecloth import *
+# We're keeping the star import to maintain compatibility with all the tests
+# This resolves F403/F405 errors but at the cost of maintaining backward compatibility
+# pylint: disable=wildcard-import, unused-wildcard-import
+# flake8: noqa: F403
+from .cheesecloth import *  
+
+# Store original __doc__ and __all__ for use later
+import sys
+_cheesecloth_doc = sys.modules['.'.join(__name__.split('.') + ['cheesecloth'])].__doc__
+_cheesecloth_all = getattr(sys.modules['.'.join(__name__.split('.') + ['cheesecloth'])], '__all__', [])
+
+# Import data loading and processing utilities
+from .data import (
+    TextDataLoader,
+    TextBatchProcessor,
+    TokenizerWrapper,
+    process_text_file,
+    process_jsonl_file,
+    process_huggingface_dataset,
+)
+
+# Import tokenized metrics utilities
+from .tokenized_metrics import (
+    TokenizedAnalyzer,
+    CharMetrics,
+    UnigramMetrics,
+    PatternMetrics,
+    SegmentationMetrics,
+    AllMetrics,
+    calculate_token_metrics,
+    process_tokenized_text,
+    process_tokenized_batch,
+    process_tokenized_data,
+)
 
 
 # Direct implementations of the new unigram metrics
@@ -235,39 +268,16 @@ def enhanced_get_all_unigram_metrics(
 # Replace the original function with our enhanced version
 get_all_unigram_metrics = enhanced_get_all_unigram_metrics
 
-# Import data loading and processing utilities
-from .data import (
-    TextDataLoader,
-    TextBatchProcessor,
-    TokenizerWrapper,
-    process_text_file,
-    process_jsonl_file,
-    process_huggingface_dataset,
-)
-
-# Import tokenized metrics utilities
-from .tokenized_metrics import (
-    TokenizedAnalyzer,
-    CharMetrics,
-    UnigramMetrics,
-    PatternMetrics,
-    SegmentationMetrics,
-    AllMetrics,
-    calculate_token_metrics,
-    process_tokenized_text,
-    process_tokenized_batch,
-    process_tokenized_data,
-)
 
 # Add version number
-__version__ = "0.1.0"
+__version__ = "0.2.2"
 
 # Ensure docstring is properly set
-__doc__ = __doc__ or cheesecloth.__doc__
+__doc__ = __doc__ or _cheesecloth_doc
 
 # Update __all__ to include Python module additions
-if hasattr(cheesecloth, "__all__"):
-    __all__ = cheesecloth.__all__ + [
+if _cheesecloth_all:
+    __all__ = _cheesecloth_all + [
         # Data processing
         "TextDataLoader",
         "TextBatchProcessor",

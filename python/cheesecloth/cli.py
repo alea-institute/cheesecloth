@@ -1503,8 +1503,15 @@ def main():
         "--include-groups",
         nargs="+",
         default=["all"],
-        help=f"Metric groups to include (default: all except 'patterns'). Primary groups: {', '.join(primary_groups)}. "
-        f"Use --list-metrics to see all available groups. Note: 'patterns' group must be explicitly included due to performance impact.",
+        help=(
+            "Metric groups to include (default: 'all' except 'patterns'). "
+            "Available primary groups: " + ", ".join(primary_groups) + ". "
+            "Legacy groups: basic, char_type, ratios, entropy, segmentation. "
+            "Utility groups: frequency. "
+            "Performance-intensive group: patterns. "
+            "Use --list-metrics for detailed information on all available metrics in each group. "
+            "Note: 'patterns' group must be explicitly included due to performance impact."
+        ),
     )
     parser.add_argument(
         "--exclude-groups",
