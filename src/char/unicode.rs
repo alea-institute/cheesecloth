@@ -13,6 +13,7 @@
 //! These functions form the foundation for higher-level text analysis by providing
 //! accurate and efficient character-level metrics.
 
+use std::collections::HashSet;
 use unicode_categories::UnicodeCategories;
 
 /// Checks if a character is a letter (alphabetic)
@@ -173,6 +174,138 @@ pub fn ratio_alpha_to_numeric(text: &str) -> f64 {
     letter_count as f64 / digit_count as f64
 }
 
+/// 1. Character Case Ratio - Ratio of uppercase to lowercase letters (not just to all letters)
+/// Returns the ratio of uppercase letters to lowercase letters in the text
+pub fn case_ratio(text: &str) -> f64 {
+    let uppercase_count = count_uppercase(text);
+    let lowercase_count = count_lowercase(text);
+
+    if lowercase_count == 0 {
+        if uppercase_count == 0 {
+            return 0.0; // No letters
+        } else {
+            return 1e6 * uppercase_count as f64; // Large number instead of infinity
+        }
+    }
+
+    uppercase_count as f64 / lowercase_count as f64
+}
+
+/// 2. Character Type Transitions - Count transitions between different character types
+/// Returns a count of how many times the character type changes in the text
+pub fn count_char_type_transitions(text: &str) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < 2 {
+        return 0;
+    }
+
+    let mut transitions = 0;
+    let mut current_type = get_char_type(&chars[0]);
+
+    for c in chars.iter().skip(1) {
+        let next_type = get_char_type(c);
+        if next_type != current_type {
+            transitions += 1;
+            current_type = next_type;
+        }
+    }
+
+    transitions
+}
+
+/// Helper function to get the type of a character for transitions
+fn get_char_type(c: &char) -> u8 {
+    if is_letter(*c) {
+        if is_uppercase(*c) {
+            return 1; // uppercase letter
+        } else {
+            return 2; // lowercase letter
+        }
+    } else if is_digit(*c) {
+        return 3; // digit
+    } else if is_punctuation(*c) {
+        return 4; // punctuation
+    } else if is_symbol(*c) {
+        return 5; // symbol
+    } else if is_whitespace(*c) {
+        return 6; // whitespace
+    } else {
+        return 7; // other
+    }
+}
+
+/// 3. Character Runs - Count runs of consecutive same character types
+/// Returns the count of sequences where the character type doesn't change
+pub fn count_consecutive_runs(text: &str) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() == 1 {
+        return 1;
+    }
+
+    let mut runs = 1; // Start with one run
+    let mut current_type = get_char_type(&chars[0]);
+
+    for c in chars.iter().skip(1) {
+        let next_type = get_char_type(c);
+        if next_type != current_type {
+            runs += 1;
+            current_type = next_type;
+        }
+    }
+
+    runs
+}
+
+/// 5. Punctuation Diversity - Count unique punctuation marks
+/// Returns the count of distinct punctuation characters in the text
+pub fn punctuation_diversity(text: &str) -> usize {
+    let mut unique_punctuation = HashSet::new();
+
+    for c in text.chars() {
+        if is_punctuation(c) {
+            unique_punctuation.insert(c);
+        }
+    }
+
+    unique_punctuation.len()
+}
+
+/// 8. Category/Group Entropy - Shannon entropy of Unicode categories
+/// Calculates the entropy of the distribution of character categories
+pub fn category_entropy(text: &str) -> f64 {
+    use crate::char::categories::char_to_category;
+
+    if text.is_empty() {
+        return 0.0;
+    }
+
+    let mut category_counts = std::collections::HashMap::new();
+    let total_chars = text.chars().count();
+
+    // Count occurrences of each category
+    for c in text.chars() {
+        let category = char_to_category(c);
+        *category_counts.entry(category).or_insert(0) += 1;
+    }
+
+    // Calculate entropy
+    let mut entropy = 0.0;
+    for (_, count) in category_counts {
+        let probability = count as f64 / total_chars as f64;
+        entropy -= probability * probability.log2();
+    }
+
+    entropy
+}
+
 /// Computes the ratio of uppercase characters to all letters in a string
 pub fn ratio_uppercase(text: &str) -> f64 {
     if text.is_empty() {
@@ -298,6 +431,11 @@ pub struct CharMetrics {
     pub lowercase: usize,
     pub alphanumeric: usize,
 
+    // New count metrics
+    pub char_type_transitions: usize,
+    pub consecutive_runs: usize,
+    pub punctuation_diversity: usize,
+
     // Ratio metrics
     pub ratio_letters: f64,
     pub ratio_digits: f64,
@@ -310,6 +448,10 @@ pub struct CharMetrics {
     pub ratio_alphanumeric: f64,
     pub ratio_alpha_to_numeric: f64,
     pub char_entropy: f64,
+
+    // New ratio metrics
+    pub case_ratio: f64,
+    pub category_entropy: f64,
 }
 
 /// Calculates all character metrics in a single pass (optimized Rust implementation)
@@ -330,12 +472,23 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
     // For entropy calculation
     let mut char_counts = std::collections::HashMap::new();
 
+    // For punctuation diversity
+    let mut unique_punctuation = std::collections::HashSet::new();
+
+    // For category entropy
+    use crate::char::categories::char_to_category;
+    let mut category_counts = std::collections::HashMap::new();
+
     // Use a single pass through the text to count all metrics at once
     for c in text.chars() {
         total_chars += 1;
 
         // Update character frequency for entropy calculation
         *char_counts.entry(c).or_insert(0) += 1;
+
+        // Update category for category entropy
+        let category = char_to_category(c);
+        *category_counts.entry(category).or_insert(0) += 1;
 
         if is_letter(c) {
             letters += 1;
@@ -351,6 +504,7 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
             alphanumeric += 1;
         } else if is_punctuation(c) {
             punctuation += 1;
+            unique_punctuation.insert(c);
         } else if is_symbol(c) {
             symbols += 1;
         } else if is_whitespace(c) {
@@ -361,6 +515,11 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
             non_ascii += 1;
         }
     }
+
+    // Calculate metrics that need a separate pass
+    let char_type_transitions = count_char_type_transitions(text);
+    let consecutive_runs = count_consecutive_runs(text);
+    let punctuation_diversity = unique_punctuation.len();
 
     // Calculate ratios, handling empty text cases
     let ratio_letters = if total_chars > 0 {
@@ -417,14 +576,32 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
         0.0
     };
 
-    // Calculate entropy
-    let mut char_entropy = 0.0;
+    // New ratio metrics
+    let case_ratio = if lowercase > 0 {
+        uppercase as f64 / lowercase as f64
+    } else if uppercase > 0 {
+        1e6 * uppercase as f64
+    } else {
+        0.0
+    };
 
+    // Calculate character entropy
+    let mut char_entropy = 0.0;
     if total_chars > 0 {
         let total_chars_f64 = total_chars as f64;
         for (_, count) in char_counts {
             let probability = count as f64 / total_chars_f64;
             char_entropy -= probability * probability.log2();
+        }
+    }
+
+    // Calculate category entropy
+    let mut category_entropy = 0.0;
+    if total_chars > 0 {
+        let total_chars_f64 = total_chars as f64;
+        for (_, count) in category_counts {
+            let probability = count as f64 / total_chars_f64;
+            category_entropy -= probability * probability.log2();
         }
     }
 
@@ -440,6 +617,11 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
         lowercase,
         alphanumeric,
 
+        // New count metrics
+        char_type_transitions,
+        consecutive_runs,
+        punctuation_diversity,
+
         ratio_letters,
         ratio_digits,
         ratio_punctuation,
@@ -451,6 +633,10 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
         ratio_alphanumeric,
         ratio_alpha_to_numeric,
         char_entropy,
+
+        // New ratio metrics
+        case_ratio,
+        category_entropy,
     }
 }
 
@@ -511,6 +697,63 @@ mod tests {
         assert!(!is_letter('1'));
         assert!(!is_letter(' '));
         assert!(!is_letter('.'));
+    }
+
+    #[test]
+    fn test_case_ratio() {
+        assert_eq!(case_ratio(""), 0.0);
+        assert_eq!(case_ratio("abc"), 0.0);
+        assert_eq!(case_ratio("ABC"), 1e6 * 3.0); // Large number instead of infinity
+        assert_eq!(case_ratio("AbCd"), 2.0 / 2.0);
+        assert_eq!(case_ratio("ABCdef"), 3.0 / 3.0);
+        assert_eq!(case_ratio("ABCdefghi"), 3.0 / 6.0);
+    }
+
+    #[test]
+    fn test_count_char_type_transitions() {
+        assert_eq!(count_char_type_transitions(""), 0);
+        assert_eq!(count_char_type_transitions("a"), 0);
+        assert_eq!(count_char_type_transitions("abc"), 0); // All same type (lowercase)
+        assert_eq!(count_char_type_transitions("aBc"), 2); // lowercase -> uppercase -> lowercase
+        assert_eq!(count_char_type_transitions("a1A"), 2); // lowercase -> digit -> uppercase
+        assert_eq!(count_char_type_transitions("a1A,"), 3); // lowercase -> digit -> uppercase -> punctuation
+        assert_eq!(count_char_type_transitions("a1A, "), 4); // lowercase -> digit -> uppercase -> punctuation -> whitespace
+    }
+
+    #[test]
+    fn test_count_consecutive_runs() {
+        assert_eq!(count_consecutive_runs(""), 0);
+        assert_eq!(count_consecutive_runs("a"), 1);
+        assert_eq!(count_consecutive_runs("abc"), 1); // One run of lowercase
+        assert_eq!(count_consecutive_runs("aBc"), 3); // lowercase -> uppercase -> lowercase
+        assert_eq!(count_consecutive_runs("AAAbbb123"), 3); // uppercase -> lowercase -> digits
+        assert_eq!(count_consecutive_runs("A1a,"), 4); // uppercase -> digit -> lowercase -> punctuation
+    }
+
+    #[test]
+    fn test_punctuation_diversity() {
+        assert_eq!(punctuation_diversity(""), 0);
+        assert_eq!(punctuation_diversity("abc"), 0);
+        assert_eq!(punctuation_diversity("abc!"), 1);
+        assert_eq!(punctuation_diversity("Hello, world!"), 2); // Comma and exclamation
+        assert_eq!(punctuation_diversity("He,ll.o; w!or?ld:"), 6); // , . ; ! ? :
+    }
+
+    #[test]
+    fn test_category_entropy() {
+        // Single category should have entropy 0
+        assert_eq!(category_entropy("aaaaa"), 0.0);
+
+        // Different categories should have non-zero entropy
+        assert!(category_entropy("aB1,") > 0.0);
+
+        // Empty string
+        assert_eq!(category_entropy(""), 0.0);
+
+        // Test increase in entropy with more diverse categories
+        let less_diverse = "aaabbb";
+        let more_diverse = "aB1!@,";
+        assert!(category_entropy(more_diverse) > category_entropy(less_diverse));
     }
 
     #[test]
@@ -724,6 +967,11 @@ mod tests {
         assert_eq!(metrics.lowercase, 8); // 'ello', 'orld'
         assert_eq!(metrics.alphanumeric, 13); // letters + digits
 
+        // Test new count metrics
+        assert_eq!(metrics.punctuation_diversity, 2); // Comma and exclamation mark
+        assert!(metrics.char_type_transitions > 0);
+        assert!(metrics.consecutive_runs > 0);
+
         // Test ratio metrics
         assert_eq!(metrics.ratio_letters, 10.0 / 21.0);
         assert_eq!(metrics.ratio_digits, 3.0 / 21.0);
@@ -737,12 +985,21 @@ mod tests {
         assert_eq!(metrics.ratio_alpha_to_numeric, 10.0 / 3.0);
         assert!(metrics.char_entropy > 0.0);
 
+        // Test new ratio metrics
+        assert_eq!(metrics.case_ratio, 2.0 / 8.0); // 2 uppercase to 8 lowercase
+        assert!(metrics.category_entropy > 0.0);
+
         // Test with empty string
         let empty_metrics = calculate_char_metrics("");
         assert_eq!(empty_metrics.total_chars, 0);
         assert_eq!(empty_metrics.ratio_letters, 0.0);
         assert_eq!(empty_metrics.ratio_uppercase, 0.0);
         assert_eq!(empty_metrics.char_entropy, 0.0);
+        assert_eq!(empty_metrics.case_ratio, 0.0);
+        assert_eq!(empty_metrics.category_entropy, 0.0);
+        assert_eq!(empty_metrics.char_type_transitions, 0);
+        assert_eq!(empty_metrics.consecutive_runs, 0);
+        assert_eq!(empty_metrics.punctuation_diversity, 0);
 
         // Test with all letters
         let letters_metrics = calculate_char_metrics("abcABC");
@@ -750,5 +1007,8 @@ mod tests {
         assert_eq!(letters_metrics.ratio_uppercase, 0.5);
         assert_eq!(letters_metrics.ratio_lowercase, 0.5);
         assert_eq!(letters_metrics.ratio_alpha_to_numeric, 1e6 * 6.0); // Large number instead of infinity
+        assert_eq!(letters_metrics.case_ratio, 3.0 / 3.0); // Equal uppercase and lowercase
+        assert!(letters_metrics.category_entropy > 0.0);
+        assert_eq!(letters_metrics.punctuation_diversity, 0);
     }
 }

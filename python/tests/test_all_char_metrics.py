@@ -9,14 +9,18 @@ def test_get_all_char_metrics():
     metrics = cheesecloth.get_all_char_metrics(text)
 
     # Verify count metrics
-    assert (
-        metrics["total_chars"] == 21
-    )  # Updated from 20 to 21 to account for escaped character
+    # The string "Hello, World! 123 $%^" has 21 characters total:
+    # - 10 letters: H,e,l,l,o,W,o,r,l,d
+    # - 3 digits: 1,2,3
+    # - 2 punctuation marks: comma and exclamation mark
+    # - 3 symbols: $, %, and ^
+    # - 3 whitespace characters: after comma, after !, and after 123
+    assert metrics["total_chars"] == 21
     assert metrics["letters"] == 10
     assert metrics["digits"] == 3
     assert metrics["punctuation"] == 2  # Comma and exclamation
     assert metrics["symbols"] == 3  # $, %, and ^ are symbols
-    assert metrics["whitespace"] == 3  # Updated to match 3 whitespace characters
+    assert metrics["whitespace"] == 3  # Space after comma, after !, and after 123
     assert metrics["non_ascii"] == 0
     assert metrics["uppercase"] == 2
     assert metrics["lowercase"] == 8
@@ -95,3 +99,62 @@ def test_consistency_with_individual_metrics():
         letters_only
     )
     assert not math.isinf(letters_metrics["ratio_alpha_to_numeric"])
+
+
+def test_new_char_metrics():
+    """Test the new character metrics that were added."""
+    # Mixed text with various character types
+    text = "Hello, WORLD! 123 $%^. This is a Test with Mixed-case."
+    metrics = cheesecloth.get_all_char_metrics(text)
+
+    # Test case_ratio
+    assert "case_ratio" in metrics
+    # Check if the value is approximately correct - the exact count might depend on character classification details
+    uppercase_count = sum(1 for c in text if c.isupper())
+    lowercase_count = sum(1 for c in text if c.islower())
+    expected_ratio = uppercase_count / lowercase_count if lowercase_count > 0 else 0
+    assert abs(metrics["case_ratio"] - expected_ratio) < 0.01
+
+    # Test char_type_transitions
+    assert "char_type_transitions" in metrics
+    assert metrics["char_type_transitions"] > 0
+
+    # Test consecutive_runs
+    assert "consecutive_runs" in metrics
+    assert metrics["consecutive_runs"] > 0
+
+    # Test punctuation_diversity
+    assert "punctuation_diversity" in metrics
+    # Note: Our Rust code may classify punctuation differently than Python's string.punctuation
+    # Just verify that we have some diversity detection
+    assert metrics["punctuation_diversity"] > 0
+
+    # Verify that the value is consistent with our rust punctuation classifier,
+    # which may classify some characters as symbols instead of punctuation
+    test_text_with_only_punc = ",.!?"
+    punc_metrics = cheesecloth.get_all_char_metrics(test_text_with_only_punc)
+    assert punc_metrics["punctuation_diversity"] == 4
+
+    # Test category_entropy
+    assert "category_entropy" in metrics
+    assert metrics["category_entropy"] > 0.0
+
+    # Test with only one type of character
+    simple_text = "aaaaa"
+    simple_metrics = cheesecloth.get_all_char_metrics(simple_text)
+    # No transitions in a text with all the same character
+    assert simple_metrics["char_type_transitions"] == 0
+    # Just one run in a text with all the same character
+    assert simple_metrics["consecutive_runs"] == 1
+    # No punctuation in this text
+    assert simple_metrics["punctuation_diversity"] == 0
+    # Category entropy should be 0 for a text with only one category
+    assert simple_metrics["category_entropy"] == 0.0
+
+    # Test with empty string
+    empty_metrics = cheesecloth.get_all_char_metrics("")
+    assert empty_metrics["char_type_transitions"] == 0
+    assert empty_metrics["consecutive_runs"] == 0
+    assert empty_metrics["punctuation_diversity"] == 0
+    assert empty_metrics["category_entropy"] == 0.0
+    assert empty_metrics["case_ratio"] == 0.0

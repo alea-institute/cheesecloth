@@ -259,6 +259,15 @@ fn get_all_char_metrics(py: Python, text: &str) -> PyResult<PyObject> {
     dict.set_item("char_entropy", metrics.char_entropy)?;
     dict.set_item("ascii_ratio", 1.0 - metrics.ratio_non_ascii)?;
 
+    // Add new count metrics
+    dict.set_item("char_type_transitions", metrics.char_type_transitions)?;
+    dict.set_item("consecutive_runs", metrics.consecutive_runs)?;
+    dict.set_item("punctuation_diversity", metrics.punctuation_diversity)?;
+
+    // Add new ratio metrics
+    dict.set_item("case_ratio", metrics.case_ratio)?;
+    dict.set_item("category_entropy", metrics.category_entropy)?;
+
     // Add Unicode category ratios
     let category_ratios = char::categories::category_ratios(text);
     let category_dict = PyDict::new(py);
@@ -312,6 +321,36 @@ fn get_all_char_metrics(py: Python, text: &str) -> PyResult<PyObject> {
         group_bigram_dict.set_item(key, ratio)?;
     }
     dict.set_item("unicode_category_group_bigram_ratios", group_bigram_dict)?;
+
+    // Add Unicode category trigram ratios
+    let category_trigram_ratios = char::categories::category_trigram_ratios(text);
+    let category_trigram_dict = PyDict::new(py);
+    for ((prev_cat, current_cat, next_cat), ratio) in category_trigram_ratios {
+        // Get tuple elements with clean formatting using START/END for None
+        let prev_str = prev_cat.unwrap_or_else(|| "START".to_string());
+        let current_str = current_cat;
+        let next_str = next_cat.unwrap_or_else(|| "END".to_string());
+
+        // Create a tuple key for Python
+        let key = (prev_str, current_str, next_str);
+        category_trigram_dict.set_item(key, ratio)?;
+    }
+    dict.set_item("unicode_category_trigram_ratios", category_trigram_dict)?;
+
+    // Add Unicode category group trigram ratios
+    let group_trigram_ratios = char::categories::category_group_trigram_ratios(text);
+    let group_trigram_dict = PyDict::new(py);
+    for ((prev_group, current_group, next_group), ratio) in group_trigram_ratios {
+        // Get tuple elements with clean formatting using START/END for None
+        let prev_str = prev_group.unwrap_or_else(|| "START".to_string());
+        let current_str = current_group;
+        let next_str = next_group.unwrap_or_else(|| "END".to_string());
+
+        // Create a tuple key for Python
+        let key = (prev_str, current_str, next_str);
+        group_trigram_dict.set_item(key, ratio)?;
+    }
+    dict.set_item("unicode_category_group_trigram_ratios", group_trigram_dict)?;
 
     // Convert the Python dictionary to a PyObject and return it
     Ok(dict.into())
@@ -459,6 +498,74 @@ fn get_unicode_category_group_bigram_ratios(py: Python, text: &str) -> PyResult<
 
         // Create a tuple key for Python
         let key = (prev_str, next_str);
+        dict.set_item(key, ratio)?;
+    }
+
+    Ok(dict.into())
+}
+
+/// Calculate Unicode category trigrams with "START" and "END" markers
+#[pyfunction]
+fn get_unicode_category_trigrams(py: Python, text: &str) -> PyResult<PyObject> {
+    let trigram_map = char::categories::count_category_trigrams(text);
+    let dict = PyDict::new(py);
+
+    // Convert special None values to "START" and "END" strings for Python interface
+    for ((prev, current, next), count) in trigram_map {
+        let prev_str = prev.unwrap_or_else(|| "START".to_string());
+        let next_str = next.unwrap_or_else(|| "END".to_string());
+        let key = (prev_str, current, next_str);
+        dict.set_item(key, count)?;
+    }
+
+    Ok(dict.into())
+}
+
+/// Calculate Unicode category trigram ratios with "START" and "END" markers
+#[pyfunction]
+fn get_unicode_category_trigram_ratios(py: Python, text: &str) -> PyResult<PyObject> {
+    let trigram_map = char::categories::category_trigram_ratios(text);
+    let dict = PyDict::new(py);
+
+    // Convert special None values to "START" and "END" strings for Python interface
+    for ((prev, current, next), ratio) in trigram_map {
+        let prev_str = prev.unwrap_or_else(|| "START".to_string());
+        let next_str = next.unwrap_or_else(|| "END".to_string());
+        let key = (prev_str, current, next_str);
+        dict.set_item(key, ratio)?;
+    }
+
+    Ok(dict.into())
+}
+
+/// Calculate Unicode category group trigrams with "START" and "END" markers
+#[pyfunction]
+fn get_unicode_category_group_trigrams(py: Python, text: &str) -> PyResult<PyObject> {
+    let trigram_map = char::categories::count_category_group_trigrams(text);
+    let dict = PyDict::new(py);
+
+    // Convert special None values to "START" and "END" strings for Python interface
+    for ((prev, current, next), count) in trigram_map {
+        let prev_str = prev.unwrap_or_else(|| "START".to_string());
+        let next_str = next.unwrap_or_else(|| "END".to_string());
+        let key = (prev_str, current, next_str);
+        dict.set_item(key, count)?;
+    }
+
+    Ok(dict.into())
+}
+
+/// Calculate Unicode category group trigram ratios with "START" and "END" markers
+#[pyfunction]
+fn get_unicode_category_group_trigram_ratios(py: Python, text: &str) -> PyResult<PyObject> {
+    let trigram_map = char::categories::category_group_trigram_ratios(text);
+    let dict = PyDict::new(py);
+
+    // Convert special None values to "START" and "END" strings for Python interface
+    for ((prev, current, next), ratio) in trigram_map {
+        let prev_str = prev.unwrap_or_else(|| "START".to_string());
+        let next_str = next.unwrap_or_else(|| "END".to_string());
+        let key = (prev_str, current, next_str);
         dict.set_item(key, ratio)?;
     }
 
@@ -707,6 +814,12 @@ fn get_all_unigram_metrics(
     dict.set_item("max_frequency_ratio", metrics.max_frequency_ratio)?;
     dict.set_item("average_token_length", metrics.average_token_length)?;
 
+    // Add new metrics
+    dict.set_item("hapax_legomena_ratio", metrics.hapax_legomena_ratio)?;
+    dict.set_item("top_5_token_coverage", metrics.top_5_token_coverage)?;
+    dict.set_item("short_token_ratio", metrics.short_token_ratio)?;
+    dict.set_item("long_token_ratio", metrics.long_token_ratio)?;
+
     // We no longer expose the token frequency dictionary
     // to keep the output more concise
     // Users can call get_unigram_frequency separately if needed
@@ -716,6 +829,88 @@ fn get_all_unigram_metrics(
 }
 
 // ML-based tokenization functions
+
+/// Calculates the hapax legomena ratio in a text.
+/// Hapax legomena are words that appear exactly once in the text.
+#[pyfunction]
+fn hapax_legomena_ratio(
+    text: &str,
+    include_punctuation: bool,
+    case_sensitive: bool,
+) -> PyResult<f64> {
+    Ok(unigram::hapax_legomena_ratio(
+        text,
+        include_punctuation,
+        case_sensitive,
+    ))
+}
+
+/// Calculates the top-5 token coverage in a text.
+/// This is the percentage of the text covered by the 5 most frequent tokens.
+#[pyfunction]
+fn top_5_token_coverage(
+    text: &str,
+    include_punctuation: bool,
+    case_sensitive: bool,
+) -> PyResult<f64> {
+    Ok(unigram::top_5_token_coverage(
+        text,
+        include_punctuation,
+        case_sensitive,
+    ))
+}
+
+/// Calculates the ratio of short tokens (3 characters or fewer) in a text.
+#[pyfunction]
+fn short_token_ratio(text: &str, include_punctuation: bool, case_sensitive: bool) -> PyResult<f64> {
+    Ok(unigram::short_token_ratio_default(
+        text,
+        include_punctuation,
+        case_sensitive,
+    ))
+}
+
+/// Calculates the ratio of short tokens in a text with a custom length threshold.
+#[pyfunction]
+fn short_token_ratio_with_threshold(
+    text: &str, 
+    include_punctuation: bool, 
+    case_sensitive: bool,
+    threshold: usize,
+) -> PyResult<f64> {
+    Ok(unigram::short_token_ratio(
+        text,
+        include_punctuation,
+        case_sensitive,
+        Some(threshold),
+    ))
+}
+
+/// Calculates the ratio of long tokens (7 characters or more) in a text.
+#[pyfunction]
+fn long_token_ratio(text: &str, include_punctuation: bool, case_sensitive: bool) -> PyResult<f64> {
+    Ok(unigram::long_token_ratio_default(
+        text,
+        include_punctuation,
+        case_sensitive,
+    ))
+}
+
+/// Calculates the ratio of long tokens in a text with a custom length threshold.
+#[pyfunction]
+fn long_token_ratio_with_threshold(
+    text: &str, 
+    include_punctuation: bool, 
+    case_sensitive: bool,
+    threshold: usize,
+) -> PyResult<f64> {
+    Ok(unigram::long_token_ratio(
+        text,
+        include_punctuation,
+        case_sensitive,
+        Some(threshold),
+    ))
+}
 
 /// Tokenizes text using an ML tokenizer and returns the token IDs.
 #[pyfunction]
@@ -1089,11 +1284,11 @@ fn get_zipf_metrics(
 }
 
 /// Calculates all pattern-based metrics efficiently by leveraging paragraph processing for large texts.
-/// 
+///
 /// This function provides pattern-based statistics such as question counts, factual statement detection,
 /// and content type indicators using regex pattern matching. For large texts, it can process by paragraph
 /// to improve performance.
-/// 
+///
 /// If a paragraph is longer than max_segment_size bytes (default 4096), it will be further broken down
 /// into line segments for even more efficient processing.
 #[pyfunction]
@@ -1106,20 +1301,20 @@ fn get_all_pattern_metrics(
 ) -> PyResult<PyObject> {
     // Initialize the pattern metrics dictionary
     let pattern_section = PyDict::new(py);
-    
+
     // For large texts, process by paragraph when requested
     if use_paragraph_processing {
         // Split the text into paragraphs
         let paragraphs = text::segmentation::split_paragraphs(text);
-        
+
         // Record that we used paragraph processing
         pattern_section.set_item("_used_paragraph_processing", true)?;
         pattern_section.set_item("_paragraph_count", paragraphs.len())?;
-        
+
         // Process the paragraphs, potentially breaking them down further
         let mut processed_segments = 0;
         let mut large_paragraphs = 0;
-        
+
         // For each metric we need to count, initialize a counter
         let mut question_count = 0;
         let mut interrogative_count = 0;
@@ -1131,96 +1326,120 @@ fn get_all_pattern_metrics(
         let mut rights_reserved_count = 0;
         let mut bullet_count = 0;
         let mut ellipsis_count = 0;
-        
+
         // Process each paragraph, optionally breaking down large ones
         for paragraph in &paragraphs {
             processed_segments += 1;
-            
+
             if paragraph.len() > max_segment_size {
                 // This paragraph is too large - break it down into lines
                 large_paragraphs += 1;
                 let lines: Vec<String> = paragraph.lines().map(|s| s.to_string()).collect();
-                
+
                 // Track extremely long lines that need further chunking
                 let mut extremely_long_lines = 0;
-                
+
                 // Process each line separately
                 for line in &lines {
                     if line.len() > max_segment_size {
                         // Even this line is too long - break it into fixed-size chunks
                         extremely_long_lines += 1;
-                        
+
                         // Process in chunks of max_segment_size
                         let mut start = 0;
-                        
+
                         while start < line.len() {
                             // Calculate end position, ensuring we stay on char boundaries
                             let candidate_end = std::cmp::min(start + max_segment_size, line.len());
-                            
+
                             // Find the closest valid char boundary (UTF-8 safe)
                             let mut end = candidate_end;
                             while end > start && !line.is_char_boundary(end) {
                                 end -= 1;
                             }
-                            
+
                             // Process this chunk if we have enough characters
                             // Skip chunks smaller than 10 chars as they're unlikely to match patterns
                             if end - start >= 10 {
                                 let chunk = &line[start..end];
-                                
+
                                 // Count patterns in this chunk
                                 question_count += patterns::QUESTION_REGEX.find_iter(chunk).count();
-                                interrogative_count += patterns::INTERROGATIVE_REGEX.find_iter(chunk).count();
-                                complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(chunk).count();
-                                factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX.find_iter(chunk).count();
-                                logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX.find_iter(chunk).count();
-                                section_heading_count += patterns::SECTION_HEADING_REGEX.find_iter(chunk).count();
-                                copyright_count += patterns::COPYRIGHT_REGEX.find_iter(chunk).count();
-                                rights_reserved_count += patterns::RIGHTS_RESERVED_REGEX.find_iter(chunk).count();
+                                interrogative_count +=
+                                    patterns::INTERROGATIVE_REGEX.find_iter(chunk).count();
+                                complex_interrogative_count +=
+                                    patterns::COMPLEX_INTERROGATIVE_REGEX
+                                        .find_iter(chunk)
+                                        .count();
+                                factual_statement_count +=
+                                    patterns::FACTUAL_STATEMENT_REGEX.find_iter(chunk).count();
+                                logical_reasoning_count +=
+                                    patterns::LOGICAL_REASONING_REGEX.find_iter(chunk).count();
+                                section_heading_count +=
+                                    patterns::SECTION_HEADING_REGEX.find_iter(chunk).count();
+                                copyright_count +=
+                                    patterns::COPYRIGHT_REGEX.find_iter(chunk).count();
+                                rights_reserved_count +=
+                                    patterns::RIGHTS_RESERVED_REGEX.find_iter(chunk).count();
                                 bullet_count += patterns::BULLET_REGEX.find_iter(chunk).count();
                                 ellipsis_count += patterns::ELLIPSIS_REGEX.find_iter(chunk).count();
                             }
-                            
+
                             // Move to next chunk
                             start = end;
                         }
                     } else {
                         // Line is reasonably sized - process normally
                         question_count += patterns::QUESTION_REGEX.find_iter(line).count();
-                        interrogative_count += patterns::INTERROGATIVE_REGEX.find_iter(line).count();
-                        complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(line).count();
-                        factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX.find_iter(line).count();
-                        logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX.find_iter(line).count();
-                        section_heading_count += patterns::SECTION_HEADING_REGEX.find_iter(line).count();
+                        interrogative_count +=
+                            patterns::INTERROGATIVE_REGEX.find_iter(line).count();
+                        complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX
+                            .find_iter(line)
+                            .count();
+                        factual_statement_count +=
+                            patterns::FACTUAL_STATEMENT_REGEX.find_iter(line).count();
+                        logical_reasoning_count +=
+                            patterns::LOGICAL_REASONING_REGEX.find_iter(line).count();
+                        section_heading_count +=
+                            patterns::SECTION_HEADING_REGEX.find_iter(line).count();
                         copyright_count += patterns::COPYRIGHT_REGEX.find_iter(line).count();
-                        rights_reserved_count += patterns::RIGHTS_RESERVED_REGEX.find_iter(line).count();
+                        rights_reserved_count +=
+                            patterns::RIGHTS_RESERVED_REGEX.find_iter(line).count();
                         bullet_count += patterns::BULLET_REGEX.find_iter(line).count();
                         ellipsis_count += patterns::ELLIPSIS_REGEX.find_iter(line).count();
                     }
                 }
-                
+
                 // Add metadata about extremely long lines
                 pattern_section.set_item("_extremely_long_lines_chunked", extremely_long_lines)?;
             } else {
                 // Normal-sized paragraph - process it as a single unit
                 question_count += patterns::QUESTION_REGEX.find_iter(paragraph).count();
                 interrogative_count += patterns::INTERROGATIVE_REGEX.find_iter(paragraph).count();
-                complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(paragraph).count();
-                factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX.find_iter(paragraph).count();
-                logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX.find_iter(paragraph).count();
-                section_heading_count += patterns::SECTION_HEADING_REGEX.find_iter(paragraph).count();
+                complex_interrogative_count += patterns::COMPLEX_INTERROGATIVE_REGEX
+                    .find_iter(paragraph)
+                    .count();
+                factual_statement_count += patterns::FACTUAL_STATEMENT_REGEX
+                    .find_iter(paragraph)
+                    .count();
+                logical_reasoning_count += patterns::LOGICAL_REASONING_REGEX
+                    .find_iter(paragraph)
+                    .count();
+                section_heading_count +=
+                    patterns::SECTION_HEADING_REGEX.find_iter(paragraph).count();
                 copyright_count += patterns::COPYRIGHT_REGEX.find_iter(paragraph).count();
-                rights_reserved_count += patterns::RIGHTS_RESERVED_REGEX.find_iter(paragraph).count();
+                rights_reserved_count +=
+                    patterns::RIGHTS_RESERVED_REGEX.find_iter(paragraph).count();
                 bullet_count += patterns::BULLET_REGEX.find_iter(paragraph).count();
                 ellipsis_count += patterns::ELLIPSIS_REGEX.find_iter(paragraph).count();
             }
         }
-        
+
         // Add processing metadata
         pattern_section.set_item("_segments_processed", processed_segments)?;
         pattern_section.set_item("_large_paragraphs_broken_down", large_paragraphs)?;
         pattern_section.set_item("_max_segment_size", max_segment_size)?;
-        
+
         // Add all the metric counts
         pattern_section.set_item("question_count", question_count)?;
         pattern_section.set_item("interrogative_question_count", interrogative_count)?;
@@ -1232,11 +1451,11 @@ fn get_all_pattern_metrics(
         pattern_section.set_item("rights_reserved_count", rights_reserved_count)?;
         pattern_section.set_item("bullet_count", bullet_count)?;
         pattern_section.set_item("ellipsis_count", ellipsis_count)?;
-        
+
         // Some patterns need to be checked in the full text for accuracy
         let contains_code = patterns::CODE_REGEX.is_match(text);
         pattern_section.set_item("contains_code", contains_code)?;
-        
+
         // Calculate bullet/ellipsis ratio
         let total_lines = text.lines().count();
         let bullet_ellipsis_ratio = if total_lines > 0 {
@@ -1245,44 +1464,45 @@ fn get_all_pattern_metrics(
             0.0
         };
         pattern_section.set_item("bullet_ellipsis_ratio", bullet_ellipsis_ratio)?;
-        
     } else {
         // Process the full text at once (original method)
         pattern_section.set_item("_used_paragraph_processing", false)?;
-        
+
         let question_count = patterns::QUESTION_REGEX.find_iter(text).count();
         pattern_section.set_item("question_count", question_count)?;
-        
+
         let interrogative_count = patterns::INTERROGATIVE_REGEX.find_iter(text).count();
         pattern_section.set_item("interrogative_question_count", interrogative_count)?;
-        
-        let complex_interrogative_count = patterns::COMPLEX_INTERROGATIVE_REGEX.find_iter(text).count();
+
+        let complex_interrogative_count = patterns::COMPLEX_INTERROGATIVE_REGEX
+            .find_iter(text)
+            .count();
         pattern_section.set_item("complex_interrogative_count", complex_interrogative_count)?;
-        
+
         let factual_statement_count = patterns::FACTUAL_STATEMENT_REGEX.find_iter(text).count();
         pattern_section.set_item("factual_statement_count", factual_statement_count)?;
-        
+
         let logical_reasoning_count = patterns::LOGICAL_REASONING_REGEX.find_iter(text).count();
         pattern_section.set_item("logical_reasoning_count", logical_reasoning_count)?;
-        
+
         let section_heading_count = patterns::SECTION_HEADING_REGEX.find_iter(text).count();
         pattern_section.set_item("section_heading_count", section_heading_count)?;
-        
+
         let copyright_count = patterns::COPYRIGHT_REGEX.find_iter(text).count();
         pattern_section.set_item("copyright_mention_count", copyright_count)?;
-        
+
         let rights_reserved_count = patterns::RIGHTS_RESERVED_REGEX.find_iter(text).count();
         pattern_section.set_item("rights_reserved_count", rights_reserved_count)?;
-        
+
         let contains_code = patterns::CODE_REGEX.is_match(text);
         pattern_section.set_item("contains_code", contains_code)?;
-        
+
         let bullet_count = patterns::BULLET_REGEX.find_iter(text).count();
         pattern_section.set_item("bullet_count", bullet_count)?;
-        
+
         let ellipsis_count = patterns::ELLIPSIS_REGEX.find_iter(text).count();
         pattern_section.set_item("ellipsis_count", ellipsis_count)?;
-        
+
         // Calculate bullet/ellipsis ratio manually to avoid another line counting pass
         let total_lines = text.lines().count();
         let bullet_ellipsis_ratio = if total_lines > 0 {
@@ -1292,14 +1512,14 @@ fn get_all_pattern_metrics(
         };
         pattern_section.set_item("bullet_ellipsis_ratio", bullet_ellipsis_ratio)?;
     }
-    
+
     Ok(pattern_section.into())
 }
 
 /// Calculates all metrics including pattern-based metrics with optimized regex matching
 /// to minimize processing time and reduce Rust-Python round trips.
-/// 
-/// By default, pattern-based metrics use paragraph processing for efficiency, with large paragraphs 
+///
+/// By default, pattern-based metrics use paragraph processing for efficiency, with large paragraphs
 /// (>4096 bytes) further broken down into line segments for better performance.
 #[pyfunction]
 #[pyo3(signature = (text, include_punctuation=true, case_sensitive=false, use_paragraph_processing=true, max_segment_size=4096))]
@@ -1313,31 +1533,42 @@ fn get_all_metrics(
 ) -> PyResult<PyObject> {
     // Create a new dictionary for results
     let result_dict = PyDict::new(py);
-    
-    // A simpler approach: use directly returned dictionaries 
+
+    // A simpler approach: use directly returned dictionaries
     // Get character metrics
     let char_metrics = get_all_char_metrics(py, text)?;
     result_dict.set_item("character", char_metrics)?;
-    
+
     // Get unigram metrics
-    let unigram_metrics = get_all_unigram_metrics(
-        py, text, include_punctuation, case_sensitive
-    )?;
+    let unigram_metrics = get_all_unigram_metrics(py, text, include_punctuation, case_sensitive)?;
     result_dict.set_item("unigram", unigram_metrics)?;
-    
+
     // Add segmentation metrics
     let segmentation_section = PyDict::new(py);
     segmentation_section.set_item("line_count", text::segmentation::count_lines(text))?;
-    segmentation_section.set_item("average_line_length", text::segmentation::average_line_length(text))?;
-    segmentation_section.set_item("paragraph_count", text::segmentation::count_paragraphs(text))?;
-    segmentation_section.set_item("average_paragraph_length", text::segmentation::average_paragraph_length(text))?;
-    segmentation_section.set_item("average_sentence_length", text::segmentation::average_sentence_length(text))?;
+    segmentation_section.set_item(
+        "average_line_length",
+        text::segmentation::average_line_length(text),
+    )?;
+    segmentation_section.set_item(
+        "paragraph_count",
+        text::segmentation::count_paragraphs(text),
+    )?;
+    segmentation_section.set_item(
+        "average_paragraph_length",
+        text::segmentation::average_paragraph_length(text),
+    )?;
+    segmentation_section.set_item(
+        "average_sentence_length",
+        text::segmentation::average_sentence_length(text),
+    )?;
     result_dict.set_item("segmentation", segmentation_section)?;
-    
+
     // Get all pattern metrics
-    let pattern_metrics = get_all_pattern_metrics(py, text, use_paragraph_processing, max_segment_size)?;
+    let pattern_metrics =
+        get_all_pattern_metrics(py, text, use_paragraph_processing, max_segment_size)?;
     result_dict.set_item("patterns", pattern_metrics)?;
-    
+
     // Return the complete dictionary
     Ok(result_dict.into())
 }
@@ -1403,6 +1634,15 @@ fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
 
+    // Unicode category trigrams
+    m.add_function(wrap_pyfunction!(get_unicode_category_trigrams, m)?)?;
+    m.add_function(wrap_pyfunction!(get_unicode_category_trigram_ratios, m)?)?;
+    m.add_function(wrap_pyfunction!(get_unicode_category_group_trigrams, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        get_unicode_category_group_trigram_ratios,
+        m
+    )?)?;
+
     // Frequency counting functions (optimized)
     m.add_function(wrap_pyfunction!(get_char_frequency, m)?)?;
     m.add_function(wrap_pyfunction!(get_char_type_frequency, m)?)?;
@@ -1440,6 +1680,10 @@ fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_unigram_frequency, m)?)?;
     m.add_function(wrap_pyfunction!(unigram_entropy, m)?)?;
     m.add_function(wrap_pyfunction!(max_unigram_frequency_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(hapax_legomena_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(top_5_token_coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(short_token_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(long_token_ratio, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_unigram_metrics, m)?)?;
 
     // ML-based tokenization functions

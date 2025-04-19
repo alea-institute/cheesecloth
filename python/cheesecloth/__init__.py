@@ -80,6 +80,161 @@ for i, metrics in enumerate(results):
 # Import all Rust binding functions
 from .cheesecloth import *
 
+
+# Direct implementations of the new unigram metrics
+def hapax_legomena_ratio(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> float:
+    """
+    Calculate the ratio of words that appear exactly once (hapax legomena) to total words.
+
+    Args:
+        text: The input text to analyze
+        include_punctuation: Whether to include punctuation in the token count
+        case_sensitive: Whether to treat uppercase and lowercase as different tokens
+
+    Returns:
+        Hapax legomena ratio (0.0 to 1.0)
+    """
+    # Get the frequency distribution
+    freq = get_unigram_frequency(text, include_punctuation, case_sensitive)
+
+    # Count tokens that appear exactly once
+    hapax_count = sum(1 for count in freq.values() if count == 1)
+
+    # Get total token count
+    total_tokens = count_unigram_tokens(text, include_punctuation)
+
+    # Return ratio (or 0.0 for empty text)
+    return hapax_count / total_tokens if total_tokens > 0 else 0.0
+
+
+def top_5_token_coverage(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> float:
+    """
+    Calculate the percentage of text covered by the 5 most frequent tokens.
+
+    Args:
+        text: The input text to analyze
+        include_punctuation: Whether to include punctuation in the token count
+        case_sensitive: Whether to treat uppercase and lowercase as different tokens
+
+    Returns:
+        Top-5 token coverage (0.0 to 1.0)
+    """
+    # Get the frequency distribution
+    freq = get_unigram_frequency(text, include_punctuation, case_sensitive)
+
+    if not freq:
+        return 0.0
+
+    # Sort by frequency and take top 5
+    sorted_counts = sorted(freq.values(), reverse=True)
+    top_5_sum = sum(sorted_counts[:5])
+
+    # Get total token count
+    total_tokens = count_unigram_tokens(text, include_punctuation)
+
+    # Return ratio
+    return top_5_sum / total_tokens if total_tokens > 0 else 0.0
+
+
+def short_token_ratio(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> float:
+    """
+    Calculate the ratio of tokens with length ≤ 3 characters.
+
+    Args:
+        text: The input text to analyze
+        include_punctuation: Whether to include punctuation in the token count
+        case_sensitive: Whether to treat uppercase and lowercase as different tokens
+
+    Returns:
+        Short token ratio (0.0 to 1.0)
+    """
+    # Get the tokens
+    tokens = (
+        tokenize_unigrams_with_punctuation(text)
+        if include_punctuation
+        else tokenize_unigrams(text)
+    )
+
+    if not tokens:
+        return 0.0
+
+    # Count short tokens (≤ 3 characters)
+    short_count = sum(1 for token in tokens if len(token) <= 3)
+
+    # Return ratio
+    return short_count / len(tokens)
+
+
+def long_token_ratio(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> float:
+    """
+    Calculate the ratio of tokens with length ≥ 7 characters.
+
+    Args:
+        text: The input text to analyze
+        include_punctuation: Whether to include punctuation in the token count
+        case_sensitive: Whether to treat uppercase and lowercase as different tokens
+
+    Returns:
+        Long token ratio (0.0 to 1.0)
+    """
+    # Get the tokens
+    tokens = (
+        tokenize_unigrams_with_punctuation(text)
+        if include_punctuation
+        else tokenize_unigrams(text)
+    )
+
+    if not tokens:
+        return 0.0
+
+    # Count long tokens (≥ 7 characters)
+    long_count = sum(1 for token in tokens if len(token) >= 7)
+
+    # Return ratio
+    return long_count / len(tokens)
+
+
+# Monkey patch get_all_unigram_metrics to include the new metrics
+original_get_all_unigram_metrics = get_all_unigram_metrics
+
+
+def enhanced_get_all_unigram_metrics(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> dict:
+    """Enhanced version of get_all_unigram_metrics that includes additional metrics."""
+    # Get the original metrics
+    metrics = original_get_all_unigram_metrics(
+        text, include_punctuation, case_sensitive
+    )
+
+    # Add the new metrics
+    metrics["hapax_legomena_ratio"] = hapax_legomena_ratio(
+        text, include_punctuation, case_sensitive
+    )
+    metrics["top_5_token_coverage"] = top_5_token_coverage(
+        text, include_punctuation, case_sensitive
+    )
+    metrics["short_token_ratio"] = short_token_ratio(
+        text, include_punctuation, case_sensitive
+    )
+    metrics["long_token_ratio"] = long_token_ratio(
+        text, include_punctuation, case_sensitive
+    )
+
+    return metrics
+
+
+# Replace the original function with our enhanced version
+get_all_unigram_metrics = enhanced_get_all_unigram_metrics
+
 # Import data loading and processing utilities
 from .data import (
     TextDataLoader,
@@ -93,6 +248,11 @@ from .data import (
 # Import tokenized metrics utilities
 from .tokenized_metrics import (
     TokenizedAnalyzer,
+    CharMetrics,
+    UnigramMetrics,
+    PatternMetrics,
+    SegmentationMetrics,
+    AllMetrics,
     calculate_token_metrics,
     process_tokenized_text,
     process_tokenized_batch,
@@ -117,8 +277,18 @@ if hasattr(cheesecloth, "__all__"):
         "process_huggingface_dataset",
         # Tokenized metrics
         "TokenizedAnalyzer",
+        "CharMetrics",
+        "UnigramMetrics",
+        "PatternMetrics",
+        "SegmentationMetrics",
+        "AllMetrics",
         "calculate_token_metrics",
         "process_tokenized_text",
         "process_tokenized_batch",
         "process_tokenized_data",
+        # New unigram metrics
+        "hapax_legomena_ratio",
+        "top_5_token_coverage",
+        "short_token_ratio",
+        "long_token_ratio",
     ]

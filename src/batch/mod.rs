@@ -62,6 +62,19 @@ impl BatchProcessor {
                     }
                     dict.set_item(key, inner_dict)?;
                 }
+                MetricValue::StringMap3(map) => {
+                    let inner_dict = PyDict::new(py);
+                    for ((prev, current, next), v) in map {
+                        // Convert the tuple key to a string representation for Python
+                        let start_str = "START".to_string();
+                        let end_str = "END".to_string();
+                        let prev_str = prev.as_ref().unwrap_or(&start_str);
+                        let next_str = next.as_ref().unwrap_or(&end_str);
+                        let key_str = format!("({},{},{})", prev_str, current, next_str);
+                        inner_dict.set_item(key_str, v)?;
+                    }
+                    dict.set_item(key, inner_dict)?;
+                }
             }
         }
 
@@ -92,6 +105,19 @@ impl BatchProcessor {
                         }
                         dict.set_item(&key, inner_dict)?;
                     }
+                    MetricValue::StringMap3(map) => {
+                        let inner_dict = PyDict::new(py);
+                        for ((prev, current, next), v) in map {
+                            // Convert the tuple key to a string representation for Python
+                            let start_str = "START".to_string();
+                            let end_str = "END".to_string();
+                            let prev_str = prev.as_ref().unwrap_or(&start_str);
+                            let next_str = next.as_ref().unwrap_or(&end_str);
+                            let key_str = format!("({},{},{})", prev_str, current, next_str);
+                            inner_dict.set_item(key_str, v)?;
+                        }
+                        dict.set_item(&key, inner_dict)?;
+                    }
                 }
             }
             result_list.append(dict)?;
@@ -107,6 +133,7 @@ enum MetricValue {
     Float(f64),
     Bool(bool),
     StringMap(HashMap<String, usize>),
+    StringMap3(HashMap<(Option<String>, String, Option<String>), usize>),
 }
 
 impl BatchProcessor {
@@ -294,6 +321,26 @@ impl BatchProcessor {
             results.insert(
                 "unicode_category_group_frequency".to_string(),
                 MetricValue::StringMap(char::categories::category_group_string_frequency(text)),
+            );
+        }
+
+        if self
+            .enabled_metrics
+            .contains("unicode_category_trigram_frequency")
+        {
+            results.insert(
+                "unicode_category_trigram_frequency".to_string(),
+                MetricValue::StringMap3(char::categories::count_category_trigrams(text)),
+            );
+        }
+
+        if self
+            .enabled_metrics
+            .contains("unicode_category_group_trigram_frequency")
+        {
+            results.insert(
+                "unicode_category_group_trigram_frequency".to_string(),
+                MetricValue::StringMap3(char::categories::count_category_group_trigrams(text)),
             );
         }
 

@@ -24,7 +24,7 @@ use std::collections::HashMap;
 lazy_static! {
     pub static ref REGEX_CACHE: std::sync::Mutex<HashMap<String, Regex>> =
         std::sync::Mutex::new(HashMap::new());
-        
+
     // Pre-compiled regex patterns for common uses
     pub static ref QUESTION_REGEX: Regex = Regex::new(common_patterns::question_pattern()).unwrap();
     pub static ref INTERROGATIVE_REGEX: Regex = Regex::new(common_patterns::interrogative_pattern()).unwrap();
@@ -162,14 +162,14 @@ pub mod common_patterns {
     pub fn question_pattern() -> &'static str {
         r"(?i)[^.!?]*\?\s*"
     }
-    
+
     /// Pattern to match interrogative question forms ("Wh-questions")
     /// Only matches questions that begin with properly capitalized interrogative words/phrases
     pub fn interrogative_pattern() -> &'static str {
         r"(?i)\b(What|Who|When|Where|Why|How|Which|Whose|
            HOW|WHAT|WHO|WHEN|WHERE|WHY|WHICH|WHOSE)\b[^.!?]*\?\s*"
     }
-    
+
     /// Pattern to match complex interrogative phrases with expanded variations
     pub fn complex_interrogative_pattern() -> &'static str {
         r"(?i)\b(What (?:is|are|was|were|will|would|can|could|should|do|does|did|have|has|had)|
@@ -181,7 +181,7 @@ pub mod common_patterns {
              Who (?:is|are|was|were|will|would|can|could|should|do|does|did|have|has|had)|
              Whose (?:is|are|was|were|will|would|can|could|should|do|does|did|have|has|had|idea|responsibility))\b[^.!?]*\?\s*"
     }
-    
+
     /// Pattern to match factual statements (often seen in educational content)
     pub fn factual_statement_pattern() -> &'static str {
         r"(?i)\b(is defined as|consists of|is composed of|refers to|means|can be described as|is a (type|form|kind) of|
@@ -216,7 +216,7 @@ pub mod common_patterns {
                 it\s+is\s+(likely|plausible|possible|probable)\s+that|may|might|could|would|should|
                 approximately|roughly|about|around|estimated\s+to\s+be|on\s+average)\b"
     }
-    
+
     /// Pattern to match logical reasoning and argumentation language
     pub fn logical_reasoning_pattern() -> &'static str {
         r"(?i)\b(
@@ -505,14 +505,14 @@ mod tests {
         // The pattern matches both "Copyright" and "©" separately
         assert_eq!(count_copyright_mentions(text_with_copyright).unwrap(), 2);
         assert_eq!(count_copyright_mentions(text_without_copyright).unwrap(), 0);
-        
+
         // Test expanded variations
         let international_copyright = "© 2023 Example Corp. Unauthorized reproduction prohibited.";
         assert!(count_copyright_mentions(international_copyright).unwrap() >= 1);
-        
+
         let formal_copyright = "Copyright owned by Example Inc. 2023. Used with permission.";
         assert!(count_copyright_mentions(formal_copyright).unwrap() >= 2);
-        
+
         let abbreviated = "Copr. 2023 Example Ltd. Proprietary and confidential.";
         assert!(count_copyright_mentions(abbreviated).unwrap() >= 1);
     }
@@ -524,14 +524,14 @@ mod tests {
 
         assert_eq!(count_rights_reserved(text_with_rights).unwrap(), 1);
         assert_eq!(count_rights_reserved(text_without_rights).unwrap(), 0);
-        
+
         // Test expanded variations
         let international_rights = "Todos los derechos reservados. Proprietary and confidential.";
         assert!(count_rights_reserved(international_rights).unwrap() >= 2);
-        
+
         let trademark_rights = "Registered trademark of Example Corp. ® Not for redistribution.";
         assert!(count_rights_reserved(trademark_rights).unwrap() >= 2);
-        
+
         let license_notice = "Licensed under MIT. All other rights reserved.";
         assert!(count_rights_reserved(license_notice).unwrap() >= 2);
     }
@@ -554,83 +554,85 @@ mod tests {
         assert_eq!(count_question_strings(text_with_questions).unwrap(), 2);
         assert_eq!(count_question_strings(text_without_questions).unwrap(), 0);
     }
-    
+
     #[test]
     fn test_interrogative_questions_pattern() {
         let text = "What is the meaning of life? This is not a question. Where is the library? I don't know?";
-        
+
         // Should match "What is..." and "Where is..." but not "I don't know?"
         assert_eq!(count_interrogative_questions(text).unwrap(), 2);
-        
+
         // With the (?i) flag, should match regardless of case
         let text_upper = "WHAT IS this? HOW about that?";
         assert_eq!(count_interrogative_questions(text_upper).unwrap(), 2);
-        
+
         let text_lower = "what is this? how about that?";
         assert_eq!(count_interrogative_questions(text_lower).unwrap(), 2); // Now matches lowercase with (?i)
-        
+
         let text_none = "This is a statement. This doesn't have wh-words?";
         assert_eq!(count_interrogative_questions(text_none).unwrap(), 0);
     }
-    
+
     #[test]
     fn test_complex_interrogative_pattern() {
         let text = "What is a CPU? How many cores does it have? Why does it get hot? When was it invented?";
         // We're just testing that it detects these phrases correctly, not exact count
         assert!(count_complex_interrogatives(text).unwrap() >= 1);
-        
+
         // Test complex variations
         let complex_text = "How many planets are in our solar system? What can I do to help? Where should we go for lunch?";
         assert!(count_complex_interrogatives(complex_text).unwrap() >= 1);
-        
+
         // Should not match questions without the proper interrogative phrases
         let non_match = "Is this a question? Do you know the answer? Can we go now?";
         assert_eq!(count_complex_interrogatives(non_match).unwrap(), 0);
     }
-    
+
     #[test]
     fn test_factual_statements_pattern() {
         let text = "A triangle is defined as a polygon with three sides. The Internet refers to a global network.";
         assert!(count_factual_statements(text).unwrap() >= 1);
-        
+
         let text_none = "I like ice cream. The sky is blue today.";
         // This might match some patterns from our expanded regex, so we just test it's a reasonable result
         let count_none = count_factual_statements(text_none).unwrap();
         assert!(count_none < 3, "Expected few matches, got {}", count_none);
-        
+
         let text_mixed = "Water is a type of liquid. It rains a lot in Seattle.";
         assert!(count_factual_statements(text_mixed).unwrap() >= 1); // Just testing it's at least 1
-        
+
         // Test with evidence markers
         let text_evidence = "Research shows that regular exercise improves health. According to studies, diet also plays a role.";
         // Direct debugging test with specific phrases from our pattern
-        assert!(FACTUAL_STATEMENT_REGEX.is_match("Research shows") ||
-               FACTUAL_STATEMENT_REGEX.is_match("According to") ||
-               count_factual_statements(text_evidence).unwrap() >= 1);
-        
+        assert!(
+            FACTUAL_STATEMENT_REGEX.is_match("Research shows")
+                || FACTUAL_STATEMENT_REGEX.is_match("According to")
+                || count_factual_statements(text_evidence).unwrap() >= 1
+        );
+
         // Test with examples
         let text_example = "Some animals, such as dolphins, are highly intelligent. For instance, they can recognize themselves in mirrors.";
         assert!(count_factual_statements(text_example).unwrap() >= 1);
-        
+
         // Test with academic hedging
         let text_hedging = "Climate change generally leads to more extreme weather. This is typically observed in coastal regions.";
         assert!(count_factual_statements(text_hedging).unwrap() >= 1);
     }
-    
+
     #[test]
     fn test_logical_reasoning_pattern() {
         let text = "Because the temperature increased, the ice melted. Therefore, we can conclude that heat causes phase changes.";
         assert!(count_logical_reasoning(text).unwrap() >= 2);
-        
+
         let text_conditional = "If water reaches 100°C at standard pressure, then it will boil. Given that we are at sea level, the water should boil at this temperature.";
         assert!(count_logical_reasoning(text_conditional).unwrap() >= 2);
-        
+
         let text_contrast = "Most metals conduct electricity; however, some metallic compounds are insulators. Despite their appearance, these materials have different properties.";
         assert!(count_logical_reasoning(text_contrast).unwrap() >= 2);
-        
+
         let text_conclusion = "In conclusion, the evidence suggests that the hypothesis is valid. To summarize, we have shown three supporting facts.";
         assert!(count_logical_reasoning(text_conclusion).unwrap() >= 2);
-        
+
         let text_none = "The sky is blue. Grass is green. Water is wet.";
         assert_eq!(count_logical_reasoning(text_none).unwrap(), 0);
     }

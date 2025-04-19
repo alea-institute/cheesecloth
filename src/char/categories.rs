@@ -635,6 +635,185 @@ pub fn category_group_bigram_ratios(text: &str) -> HashMap<(Option<String>, Opti
         .collect()
 }
 
+/// Calculate trigrams of Unicode categories in a text
+/// Each trigram is a tuple of (prev category, current category, next category)
+/// For the first character, prev is None; for the last character, next is None
+pub fn calculate_category_trigrams(
+    text: &str,
+) -> Vec<(
+    Option<UnicodeCategory>,
+    UnicodeCategory,
+    Option<UnicodeCategory>,
+)> {
+    let chars: Vec<char> = text.chars().collect();
+
+    if chars.is_empty() {
+        return Vec::new();
+    }
+
+    // Special case for single character
+    if chars.len() == 1 {
+        let cat = char_to_category(chars[0]);
+        return vec![(None, cat, None)];
+    }
+
+    // Special case for two characters
+    if chars.len() == 2 {
+        let cat1 = char_to_category(chars[0]);
+        let cat2 = char_to_category(chars[1]);
+        return vec![(None, cat1, Some(cat2)), (Some(cat1), cat2, None)];
+    }
+
+    let categories: Vec<UnicodeCategory> = chars.iter().map(|&c| char_to_category(c)).collect();
+    let mut trigrams = Vec::with_capacity(chars.len());
+
+    // First character: (None, Char1, Char2)
+    trigrams.push((None, categories[0], Some(categories[1])));
+
+    // Middle characters: (Char_i-1, Char_i, Char_i+1)
+    for i in 1..categories.len() - 1 {
+        trigrams.push((
+            Some(categories[i - 1]),
+            categories[i],
+            Some(categories[i + 1]),
+        ));
+    }
+
+    // Last character: (CharN-1, CharN, None)
+    let last_idx = categories.len() - 1;
+    trigrams.push((Some(categories[last_idx - 1]), categories[last_idx], None));
+
+    trigrams
+}
+
+/// Count the frequencies of Unicode category trigrams in a text
+pub fn count_category_trigrams(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), usize> {
+    let trigrams = calculate_category_trigrams(text);
+    let mut counts = HashMap::new();
+
+    for (prev_cat, current_cat, next_cat) in trigrams {
+        // Convert categories to strings, using None where appropriate
+        let prev_cat_str = prev_cat.map(|c| category_to_string(c).to_string());
+        let current_cat_str = category_to_string(current_cat).to_string();
+        let next_cat_str = next_cat.map(|c| category_to_string(c).to_string());
+
+        // Increment the count for this trigram
+        *counts
+            .entry((prev_cat_str, current_cat_str, next_cat_str))
+            .or_insert(0) += 1;
+    }
+
+    counts
+}
+
+/// Calculate the ratios of Unicode category trigrams in a text
+pub fn category_trigram_ratios(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), f64> {
+    let counts = count_category_trigrams(text);
+
+    // For trigrams, the total count should be the sum of all trigram counts
+    let total: usize = counts.values().sum();
+
+    if total == 0 {
+        return HashMap::new();
+    }
+
+    counts
+        .into_iter()
+        .map(|(k, v)| (k, v as f64 / total as f64))
+        .collect()
+}
+
+/// Calculate trigrams of Unicode category groups in a text
+pub fn calculate_category_group_trigrams(
+    text: &str,
+) -> Vec<(
+    Option<UnicodeCategoryGroup>,
+    UnicodeCategoryGroup,
+    Option<UnicodeCategoryGroup>,
+)> {
+    let chars: Vec<char> = text.chars().collect();
+
+    if chars.is_empty() {
+        return Vec::new();
+    }
+
+    // Special case for single character
+    if chars.len() == 1 {
+        let group = char_to_category_group(chars[0]);
+        return vec![(None, group, None)];
+    }
+
+    // Special case for two characters
+    if chars.len() == 2 {
+        let group1 = char_to_category_group(chars[0]);
+        let group2 = char_to_category_group(chars[1]);
+        return vec![(None, group1, Some(group2)), (Some(group1), group2, None)];
+    }
+
+    let groups: Vec<UnicodeCategoryGroup> =
+        chars.iter().map(|&c| char_to_category_group(c)).collect();
+    let mut trigrams = Vec::with_capacity(chars.len());
+
+    // First character: (None, Group1, Group2)
+    trigrams.push((None, groups[0], Some(groups[1])));
+
+    // Middle characters: (Group_i-1, Group_i, Group_i+1)
+    for i in 1..groups.len() - 1 {
+        trigrams.push((Some(groups[i - 1]), groups[i], Some(groups[i + 1])));
+    }
+
+    // Last character: (GroupN-1, GroupN, None)
+    let last_idx = groups.len() - 1;
+    trigrams.push((Some(groups[last_idx - 1]), groups[last_idx], None));
+
+    trigrams
+}
+
+/// Count the frequencies of Unicode category group trigrams in a text
+pub fn count_category_group_trigrams(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), usize> {
+    let trigrams = calculate_category_group_trigrams(text);
+    let mut counts = HashMap::new();
+
+    for (prev_group, current_group, next_group) in trigrams {
+        // Convert category groups to strings, using None where appropriate
+        let prev_group_str = prev_group.map(|g| category_group_to_string(g).to_string());
+        let current_group_str = category_group_to_string(current_group).to_string();
+        let next_group_str = next_group.map(|g| category_group_to_string(g).to_string());
+
+        // Increment the count for this trigram
+        *counts
+            .entry((prev_group_str, current_group_str, next_group_str))
+            .or_insert(0) += 1;
+    }
+
+    counts
+}
+
+/// Calculate the ratios of Unicode category group trigrams in a text
+pub fn category_group_trigram_ratios(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), f64> {
+    let counts = count_category_group_trigrams(text);
+
+    // For trigrams, the total count should be the sum of all trigram counts
+    let total: usize = counts.values().sum();
+
+    if total == 0 {
+        return HashMap::new();
+    }
+
+    counts
+        .into_iter()
+        .map(|(k, v)| (k, v as f64 / total as f64))
+        .collect()
+}
+
 mod tests {
     // Importing everything since most of the module's functions are tested
     #[allow(unused_imports)]
@@ -877,6 +1056,198 @@ mod tests {
         ); // L→N
         assert!((ratios[&(Some("N".to_string()), None)] - 1.0 / 3.0).abs() < 1e-10);
         // N→End
+    }
+
+    #[test]
+    fn test_calculate_category_trigrams() {
+        let text = "Hi!";
+        let trigrams = calculate_category_trigrams(text);
+
+        assert_eq!(trigrams.len(), 3);
+        assert_eq!(
+            trigrams[0],
+            (None, UnicodeCategory::Lu, Some(UnicodeCategory::Ll))
+        ); // Start→H→i
+        assert_eq!(
+            trigrams[1],
+            (
+                Some(UnicodeCategory::Lu),
+                UnicodeCategory::Ll,
+                Some(UnicodeCategory::Po)
+            )
+        ); // H→i→!
+        assert_eq!(
+            trigrams[2],
+            (Some(UnicodeCategory::Ll), UnicodeCategory::Po, None)
+        ); // i→!→End
+    }
+
+    #[test]
+    fn test_count_category_trigrams() {
+        let text = "Hi!";
+        let counts = count_category_trigrams(text);
+
+        assert_eq!(counts.len(), 3);
+        assert_eq!(counts[&(None, "Lu".to_string(), Some("Ll".to_string()))], 1); // Start→H→i
+        assert_eq!(
+            counts[&(
+                Some("Lu".to_string()),
+                "Ll".to_string(),
+                Some("Po".to_string())
+            )],
+            1
+        ); // H→i→!
+        assert_eq!(counts[&(Some("Ll".to_string()), "Po".to_string(), None)], 1);
+        // i→!→End
+    }
+
+    #[test]
+    fn test_category_trigram_ratios() {
+        let text = "Hi!";
+        let ratios = category_trigram_ratios(text);
+
+        assert_eq!(ratios.len(), 3);
+        assert!(
+            (ratios[&(None, "Lu".to_string(), Some("Ll".to_string()))] - 1.0 / 3.0).abs() < 1e-10
+        ); // Start→H→i
+        assert!(
+            (ratios[&(
+                Some("Lu".to_string()),
+                "Ll".to_string(),
+                Some("Po".to_string())
+            )] - 1.0 / 3.0)
+                .abs()
+                < 1e-10
+        ); // H→i→!
+        assert!(
+            (ratios[&(Some("Ll".to_string()), "Po".to_string(), None)] - 1.0 / 3.0).abs() < 1e-10
+        ); // i→!→End
+    }
+
+    #[test]
+    fn test_calculate_category_group_trigrams() {
+        let text = "Hi!";
+        let trigrams = calculate_category_group_trigrams(text);
+
+        assert_eq!(trigrams.len(), 3);
+        assert_eq!(
+            trigrams[0],
+            (None, UnicodeCategoryGroup::L, Some(UnicodeCategoryGroup::L))
+        ); // Start→H→i
+        assert_eq!(
+            trigrams[1],
+            (
+                Some(UnicodeCategoryGroup::L),
+                UnicodeCategoryGroup::L,
+                Some(UnicodeCategoryGroup::P)
+            )
+        ); // H→i→!
+        assert_eq!(
+            trigrams[2],
+            (Some(UnicodeCategoryGroup::L), UnicodeCategoryGroup::P, None)
+        ); // i→!→End
+    }
+
+    #[test]
+    fn test_count_category_group_trigrams() {
+        let text = "Hi!";
+        let counts = count_category_group_trigrams(text);
+
+        assert_eq!(counts.len(), 3);
+        assert_eq!(counts[&(None, "L".to_string(), Some("L".to_string()))], 1); // Start→H→i
+        assert_eq!(
+            counts[&(
+                Some("L".to_string()),
+                "L".to_string(),
+                Some("P".to_string())
+            )],
+            1
+        ); // H→i→!
+        assert_eq!(counts[&(Some("L".to_string()), "P".to_string(), None)], 1); // i→!→End
+    }
+
+    #[test]
+    fn test_category_group_trigram_ratios() {
+        let text = "Hi!";
+        let ratios = category_group_trigram_ratios(text);
+
+        assert_eq!(ratios.len(), 3);
+        assert!(
+            (ratios[&(None, "L".to_string(), Some("L".to_string()))] - 1.0 / 3.0).abs() < 1e-10
+        ); // Start→H→i
+        assert!(
+            (ratios[&(
+                Some("L".to_string()),
+                "L".to_string(),
+                Some("P".to_string())
+            )] - 1.0 / 3.0)
+                .abs()
+                < 1e-10
+        ); // H→i→!
+        assert!(
+            (ratios[&(Some("L".to_string()), "P".to_string(), None)] - 1.0 / 3.0).abs() < 1e-10
+        ); // i→!→End
+    }
+
+    #[test]
+    fn test_trigram_empty_string() {
+        let text = "";
+        assert_eq!(calculate_category_trigrams(text).len(), 0);
+        assert_eq!(calculate_category_group_trigrams(text).len(), 0);
+        assert_eq!(count_category_trigrams(text).len(), 0);
+        assert_eq!(count_category_group_trigrams(text).len(), 0);
+        assert_eq!(category_trigram_ratios(text).len(), 0);
+        assert_eq!(category_group_trigram_ratios(text).len(), 0);
+    }
+
+    #[test]
+    fn test_trigram_single_character() {
+        let text = "A";
+        let cat_trigrams = calculate_category_trigrams(text);
+        assert_eq!(cat_trigrams.len(), 1);
+        assert_eq!(cat_trigrams[0], (None, UnicodeCategory::Lu, None));
+
+        let group_trigrams = calculate_category_group_trigrams(text);
+        assert_eq!(group_trigrams.len(), 1);
+        assert_eq!(group_trigrams[0], (None, UnicodeCategoryGroup::L, None));
+    }
+
+    #[test]
+    fn test_trigram_two_characters() {
+        let text = "A1";
+        let cat_trigrams = calculate_category_trigrams(text);
+        assert_eq!(cat_trigrams.len(), 2);
+        assert_eq!(
+            cat_trigrams[0],
+            (None, UnicodeCategory::Lu, Some(UnicodeCategory::Nd))
+        );
+        assert_eq!(
+            cat_trigrams[1],
+            (Some(UnicodeCategory::Lu), UnicodeCategory::Nd, None)
+        );
+
+        let group_trigrams = calculate_category_group_trigrams(text);
+        assert_eq!(group_trigrams.len(), 2);
+        assert_eq!(
+            group_trigrams[0],
+            (None, UnicodeCategoryGroup::L, Some(UnicodeCategoryGroup::N))
+        );
+        assert_eq!(
+            group_trigrams[1],
+            (Some(UnicodeCategoryGroup::L), UnicodeCategoryGroup::N, None)
+        );
+    }
+
+    #[test]
+    fn test_trigram_ratio_sums() {
+        let text = "Hello!";
+        let cat_ratios = category_trigram_ratios(text);
+        let total = cat_ratios.values().sum::<f64>();
+        assert!((total - 1.0).abs() < 1e-10);
+
+        let group_ratios = category_group_trigram_ratios(text);
+        let total = group_ratios.values().sum::<f64>();
+        assert!((total - 1.0).abs() < 1e-10);
     }
 
     #[test]

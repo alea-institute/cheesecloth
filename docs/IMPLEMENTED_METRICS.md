@@ -44,6 +44,11 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 | Unicode Category Bigram Ratios | Ratio distribution of Unicode category bigrams | `get_unicode_category_bigram_ratios()` |
 | Unicode Category Group Bigrams | Bigram frequencies of Unicode category groups | `get_unicode_category_group_bigrams()` |
 | Unicode Category Group Bigram Ratios | Ratio distribution of Unicode category group bigrams | `get_unicode_category_group_bigram_ratios()` |
+| Case Ratio | Ratio of uppercase to lowercase letters | `case_ratio` from `get_all_char_metrics()` |
+| Character Type Transitions | Count of transitions between different character types | `char_type_transitions` from `get_all_char_metrics()` |
+| Consecutive Character Runs | Count of runs of consecutive same character types | `consecutive_runs` from `get_all_char_metrics()` |
+| Punctuation Diversity | Count of unique punctuation characters used | `punctuation_diversity` from `get_all_char_metrics()` |
+| Category Entropy | Shannon entropy of Unicode categories | `category_entropy` from `get_all_char_metrics()` |
 | All Character Metrics | Combined computation of all character metrics | `get_all_char_metrics()` |
 
 ## Text Segmentation Metrics
@@ -77,6 +82,10 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 | Unigram Frequency | Frequency distribution of unigram tokens | `get_unigram_frequency()` |
 | Unigram Entropy | Shannon entropy of unigram token distribution | `unigram_entropy()` |
 | Max Frequency Ratio | Ratio of most frequent token's count to total tokens | `max_unigram_frequency_ratio()` |
+| Hapax Legomena Ratio | Ratio of words appearing exactly once to total words | `hapax_legomena_ratio()` |
+| Top-5 Token Coverage | Percentage of text covered by 5 most frequent tokens | `top_5_token_coverage()` |
+| Short Token Ratio | Ratio of tokens with length ≤ 3 characters | `short_token_ratio()` |
+| Long Token Ratio | Ratio of tokens with length ≥ 7 characters | `long_token_ratio()` |
 | All Unigram Metrics | Combined computation of all unigram metrics | `get_all_unigram_metrics()` |
 
 ## Pattern Metrics

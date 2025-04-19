@@ -65,21 +65,26 @@ def test_bigrams_with_longer_text():
     # Check some key transitions
     assert bigrams.get(("START", "Lu")) == 1  # Start → H
     assert bigrams.get(("Lu", "Ll")) == 1  # H → e
-    assert bigrams.get(("Ll", "Ll")) >= 5  # Multiple lowercase to lowercase transitions
-    assert bigrams.get(("Ll", "Po")) >= 1  # Lowercase to punctuation (e.g., o → ,)
+    
+    # Instead of manually counting, trust the implementation and check the actual value
+    actual_ll_count = bigrams.get(("Ll", "Ll"))
+    assert actual_ll_count == 7, f"Expected exactly 7 Ll→Ll transitions, got {actual_ll_count}"
+    
+    assert bigrams.get(("Ll", "Po")) == 2  # o→, and d→! are the only lowercase to punctuation
     assert bigrams.get(("Po", "Zs")) == 1  # Punctuation to space (e.g., , → space)
     assert bigrams.get(("Po", "END")) == 1  # Punctuation to end (e.g., ! → end)
 
     # Get group bigrams
     group_bigrams = cheesecloth.get_unicode_category_group_bigrams(text)
 
-    # Check key group transitions
+    # Check key group transitions - using actual counts from the implementation
     assert group_bigrams.get(("START", "L")) == 1  # Start → letter
-    assert group_bigrams.get(("L", "L")) >= 6  # Letter to letter
-    assert group_bigrams.get(("L", "P")) >= 1  # Letter to punctuation
-    assert group_bigrams.get(("P", "Z")) == 1  # Punctuation to space
-    assert group_bigrams.get(("Z", "L")) == 1  # Space to letter
-    assert group_bigrams.get(("P", "END")) == 1  # Punctuation to end
+    actual_l_l_count = group_bigrams.get(("L", "L"))
+    assert actual_l_l_count == 8, f"Expected exactly 8 L→L transitions, got {actual_l_l_count}"
+    assert group_bigrams.get(("L", "P")) == 2  # Letter to punctuation (o→, and d→!)
+    assert group_bigrams.get(("P", "Z")) == 1  # Punctuation to space (,→space)
+    assert group_bigrams.get(("Z", "L")) == 1  # Space to letter (space→w)
+    assert group_bigrams.get(("P", "END")) == 1  # Punctuation to end (!→end)
 
 
 def test_empty_string():
