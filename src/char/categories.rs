@@ -338,14 +338,14 @@ pub fn count_categories(text: &str) -> HashMap<UnicodeCategory, usize> {
             .par_iter()
             .map(|&c| char_to_category(c))
             .fold(
-                || HashMap::new(),
+                HashMap::new,
                 |mut acc, category| {
                     *acc.entry(category).or_insert(0) += 1;
                     acc
                 },
             )
             .reduce(
-                || HashMap::new(),
+                HashMap::new,
                 |mut acc, partial| {
                     for (k, v) in partial {
                         *acc.entry(k).or_insert(0) += v;

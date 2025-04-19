@@ -663,6 +663,57 @@ def get_unicode_category_group_bigram_ratios(
     """
     ...
 
+# Unicode category trigram functions
+def get_unicode_category_trigrams(text: str) -> Dict[Tuple[str, str, str], int]:
+    """
+    Count occurrences of each Unicode category trigram in the text.
+
+    Args:
+        text: The input text to analyze
+
+    Returns:
+        Dictionary mapping Unicode category trigrams to their counts
+    """
+    ...
+
+def get_unicode_category_trigram_ratios(text: str) -> Dict[Tuple[str, str, str], float]:
+    """
+    Calculate the ratio of each Unicode category trigram in the text.
+
+    Args:
+        text: The input text to analyze
+
+    Returns:
+        Dictionary mapping Unicode category trigrams to their frequency ratios (0.0 to 1.0)
+    """
+    ...
+
+def get_unicode_category_group_trigrams(text: str) -> Dict[Tuple[str, str, str], int]:
+    """
+    Count occurrences of each Unicode category group trigram in the text.
+
+    Args:
+        text: The input text to analyze
+
+    Returns:
+        Dictionary mapping Unicode category group trigrams to their counts
+    """
+    ...
+
+def get_unicode_category_group_trigram_ratios(
+    text: str,
+) -> Dict[Tuple[str, str, str], float]:
+    """
+    Calculate the ratio of each Unicode category group trigram in the text.
+
+    Args:
+        text: The input text to analyze
+
+    Returns:
+        Dictionary mapping Unicode category group trigrams to their frequency ratios (0.0 to 1.0)
+    """
+    ...
+
 # Frequency functions
 def get_char_frequency(text: str) -> Dict[str, int]:
     """

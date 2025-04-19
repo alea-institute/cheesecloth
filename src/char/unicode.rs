@@ -175,7 +175,8 @@ pub fn ratio_alpha_to_numeric(text: &str) -> f64 {
 }
 
 /// 1. Character Case Ratio - Ratio of uppercase to lowercase letters (not just to all letters)
-/// Returns the ratio of uppercase letters to lowercase letters in the text
+///
+///    Returns the ratio of uppercase letters to lowercase letters in the text
 pub fn case_ratio(text: &str) -> f64 {
     let uppercase_count = count_uppercase(text);
     let lowercase_count = count_lowercase(text);
@@ -192,7 +193,8 @@ pub fn case_ratio(text: &str) -> f64 {
 }
 
 /// 2. Character Type Transitions - Count transitions between different character types
-/// Returns a count of how many times the character type changes in the text
+///
+///    Returns a count of how many times the character type changes in the text
 pub fn count_char_type_transitions(text: &str) -> usize {
     if text.is_empty() {
         return 0;
@@ -221,25 +223,26 @@ pub fn count_char_type_transitions(text: &str) -> usize {
 fn get_char_type(c: &char) -> u8 {
     if is_letter(*c) {
         if is_uppercase(*c) {
-            return 1; // uppercase letter
+            1 // uppercase letter
         } else {
-            return 2; // lowercase letter
+            2 // lowercase letter
         }
     } else if is_digit(*c) {
-        return 3; // digit
+        3 // digit
     } else if is_punctuation(*c) {
-        return 4; // punctuation
+        4 // punctuation
     } else if is_symbol(*c) {
-        return 5; // symbol
+        5 // symbol
     } else if is_whitespace(*c) {
-        return 6; // whitespace
+        6 // whitespace
     } else {
-        return 7; // other
+        7 // other
     }
 }
 
 /// 3. Character Runs - Count runs of consecutive same character types
-/// Returns the count of sequences where the character type doesn't change
+///
+///    Returns the count of sequences where the character type doesn't change
 pub fn count_consecutive_runs(text: &str) -> usize {
     if text.is_empty() {
         return 0;
@@ -265,7 +268,8 @@ pub fn count_consecutive_runs(text: &str) -> usize {
 }
 
 /// 5. Punctuation Diversity - Count unique punctuation marks
-/// Returns the count of distinct punctuation characters in the text
+///
+///    Returns the count of distinct punctuation characters in the text
 pub fn punctuation_diversity(text: &str) -> usize {
     let mut unique_punctuation = HashSet::new();
 
@@ -279,7 +283,8 @@ pub fn punctuation_diversity(text: &str) -> usize {
 }
 
 /// 8. Category/Group Entropy - Shannon entropy of Unicode categories
-/// Calculates the entropy of the distribution of character categories
+///
+///    Calculates the entropy of the distribution of character categories
 pub fn category_entropy(text: &str) -> f64 {
     use crate::char::categories::char_to_category;
 

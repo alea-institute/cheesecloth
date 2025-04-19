@@ -118,12 +118,10 @@ pub fn segment_sentences(text: &str) -> Vec<String> {
     for c in text.chars() {
         current_sentence.push(c);
 
-        // Check if the character is a sentence terminator
-        if sentence_terminators.contains(&c) {
-            if !current_sentence.trim().is_empty() {
-                sentences.push(current_sentence.trim().to_string());
-                current_sentence = String::new();
-            }
+        // Check if the character is a sentence terminator and the sentence is not empty
+        if sentence_terminators.contains(&c) && !current_sentence.trim().is_empty() {
+            sentences.push(current_sentence.trim().to_string());
+            current_sentence = String::new();
         }
     }
 

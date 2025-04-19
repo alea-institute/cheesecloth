@@ -718,18 +718,18 @@ class PatternMetrics:
 
         # Ensure required fields are present
         init_dict = {}
-        for field in required_fields:
-            if field in metrics:
-                init_dict[field] = metrics[field]
+        for field_name in required_fields:
+            if field_name in metrics:
+                init_dict[field_name] = metrics[field_name]
             else:
                 # Default to 0 or False for missing required fields
-                if field == "contains_code":
-                    init_dict[field] = False
+                if field_name == "contains_code":
+                    init_dict[field_name] = False
                 else:
-                    init_dict[field] = 0
+                    init_dict[field_name] = 0
 
         # Add optional metadata if present
-        for field in [
+        for opt_field in [
             "_used_paragraph_processing",
             "_paragraph_count",
             "_segments_processed",
@@ -737,8 +737,8 @@ class PatternMetrics:
             "_extremely_long_lines_chunked",
             "_max_segment_size",
         ]:
-            if field in metrics:
-                init_dict[field] = metrics[field]
+            if opt_field in metrics:
+                init_dict[opt_field] = metrics[opt_field]
 
         return cls(**init_dict)
 

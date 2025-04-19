@@ -76,6 +76,12 @@ pub struct HyperTextMetrics {
     pub unigram_entropy: f64,
 }
 
+impl Default for HyperTextMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HyperTextMetrics {
     /// Create a new empty HyperTextMetrics instance
     pub fn new() -> Self {
@@ -286,7 +292,7 @@ pub fn calculate_all_metrics(
 
     // Calculate character entropy in a single pass
     if result.char_count > 0 {
-        for (_, count) in &char_counts {
+        for count in char_counts.values() {
             let probability = *count as f64 / total_chars_f64;
             result.char_entropy -= probability * probability.log2();
         }

@@ -87,7 +87,7 @@ pub fn calculate_zipf_fitness<T: std::hash::Hash + Eq>(frequencies: &HashMap<T, 
     let fitness = 1.0 - (sum_squared_diff / max_possible_diff).sqrt();
 
     // Handle edge cases and bound to [0, 1]
-    fitness.max(0.0).min(1.0)
+    fitness.clamp(0.0, 1.0)
 }
 
 /// Calculates the power law exponent (alpha) for a frequency distribution
@@ -352,7 +352,7 @@ pub fn analyze_vocab_growth(text: &str, chunk_size: usize) -> VocabGrowthStats {
     }
 
     // Calculate statistics
-    let average_new_tokens = if chunks.len() > 0 {
+    let average_new_tokens = if !chunks.is_empty() {
         new_tokens_per_chunk.iter().sum::<usize>() as f64 / chunks.len() as f64
     } else {
         0.0

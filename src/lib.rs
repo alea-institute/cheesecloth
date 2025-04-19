@@ -871,6 +871,7 @@ fn short_token_ratio(text: &str, include_punctuation: bool, case_sensitive: bool
 }
 
 /// Calculates the ratio of short tokens in a text with a custom length threshold.
+#[allow(dead_code)]
 #[pyfunction]
 fn short_token_ratio_with_threshold(
     text: &str, 
@@ -897,6 +898,7 @@ fn long_token_ratio(text: &str, include_punctuation: bool, case_sensitive: bool)
 }
 
 /// Calculates the ratio of long tokens in a text with a custom length threshold.
+#[allow(dead_code)]
 #[pyfunction]
 fn long_token_ratio_with_threshold(
     text: &str, 
