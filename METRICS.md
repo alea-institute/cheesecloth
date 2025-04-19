@@ -1,21 +1,23 @@
-# Cheesecloth Implemented Metrics
+# Cheesecloth Metrics
 
-This document provides a comprehensive list of all metrics implemented in Cheesecloth, organized by category.
+This document provides a complete, detailed inventory of metrics and filters used in Cheesecloth for text quality assessment.
 
 ## Table of Contents
 
-- [Character Metrics](#character-metrics)
-- [Text Segmentation Metrics](#text-segmentation-metrics)
-- [Unigram Metrics](#unigram-metrics)
+- [Character-Level Metrics](#character-level-metrics)
+- [Word-Level & Segmentation Metrics](#word-level--segmentation-metrics)
+- [Unigram Token Metrics](#unigram-token-metrics)
 - [Pattern Metrics](#pattern-metrics)
 - [Compression Metrics](#compression-metrics)
 - [Statistical Distribution Metrics](#statistical-distribution-metrics)
 - [Tokenizer Metrics](#tokenizer-metrics)
 - [Readability Metrics](#readability-metrics)
+- [Combined Metrics](#combined-metrics)
+- [Legacy Functions](#legacy-functions)
 
-## Character Metrics
+## Character-Level Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Character Count | Total number of characters in the text | `count_chars()` |
 | Letter Count | Number of letter characters | `count_letters()` |
@@ -51,9 +53,9 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 | Category Entropy | Shannon entropy of Unicode categories | `category_entropy` from `get_all_char_metrics()` |
 | All Character Metrics | Combined computation of all character metrics | `get_all_char_metrics()` |
 
-## Text Segmentation Metrics
+## Word-Level & Segmentation Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Word Count | Number of words in the text | `count_words()` |
 | Line Count | Number of lines in the text | `count_lines()` |
@@ -69,9 +71,9 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 | Segment Paragraphs | Alternative function to split text into paragraphs | `segment_paragraphs()` |
 | Segment Sentences | Split text into sentences | `segment_sentences()` |
 
-## Unigram Metrics
+## Unigram Token Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Tokenize Unigrams | Split text into unigram tokens (words only) | `tokenize_unigrams()` |
 | Tokenize with Punctuation | Split text into tokens including punctuation | `tokenize_unigrams_with_punctuation()` |
@@ -90,7 +92,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 ## Pattern Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Question Count | Number of question patterns in the text | `count_question_strings()` |
 | Interrogative Question Count | Number of interrogative questions | `count_interrogative_questions()` |
@@ -111,7 +113,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 ## Compression Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Compression Ratio | Ratio of original text size to compressed size | `compression_ratio()` |
 | Unigram Compression Ratio | Compression ratio of word tokens | `unigram_compression_ratio()` |
@@ -119,7 +121,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 ## Statistical Distribution Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Zipf Fitness Score | How well the word frequency follows Zipf's law | `zipf_fitness_score()` |
 | Power Law Exponent | Exponent of the power law distribution for word frequencies | `power_law_exponent()` |
@@ -129,7 +131,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 ## Tokenizer Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Tokenize ML | Tokenize text using an ML tokenizer | `tokenize_ml()` |
 | Batch Tokenize ML | Batch tokenize multiple texts using an ML tokenizer | `batch_tokenize_ml()` |
@@ -143,7 +145,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 ## Readability Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Readability Score | Overall readability score (0.0-1.0) | `calculate_readability_score()` |
 | Readability Level | Categorical assessment of readability (Easy to Very Complex) | `get_readability_level()` |
@@ -151,7 +153,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 ## Combined Metrics
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | All Metrics | Compute all metrics in one efficient pass | `get_all_metrics()` |
 
@@ -159,7 +161,7 @@ This document provides a comprehensive list of all metrics implemented in Cheese
 
 These functions have been superseded by more efficient implementations but are maintained for backward compatibility:
 
-| Metric Name | Description | Python Method |
+| Metric | Description | Python Method |
 |-------------|-------------|---------------|
 | Combined Character Metrics | Older implementation of combined character metrics | `combined_char_metrics()` |
 | Get Unicode Categories | Get Unicode category for each character | `get_unicode_categories()` |
@@ -168,3 +170,82 @@ These functions have been superseded by more efficient implementations but are m
 | Count Unicode Category Groups | Count occurrences of each Unicode category group | `count_unicode_category_groups()` |
 | Get Unicode Category Ratios | Calculate ratio of each Unicode category | `get_unicode_category_ratios()` |
 | Get Unicode Category Group Ratios | Calculate ratio of each Unicode category group | `get_unicode_category_group_ratios()` |
+
+## Background on Common Metrics
+
+This section provides a comprehensive overview of metrics and filters used in large-scale text corpora quality assessment, with references to significant projects.
+
+### Character-Level Metrics
+
+| Metric                   | Description                         | Complexity | Category           | Example Projects        |
+| ------------------------ | ----------------------------------- | ---------- | ------------------ | ----------------------- |
+| `total_characters`       | Total number of characters          | Low        | Length             | General                 |
+| `whitespace_count`       | Number of whitespace characters     | Low        | Composition        | General                 |
+| `ratio_whitespace`       | Proportion of whitespace characters | Low        | Composition        | MassiveText             |
+| `alphanumeric_count`     | Alphanumeric characters count       | Low        | Composition        | General                 |
+| `ratio_alphanumeric`     | Ratio of alphanumeric characters    | Low        | Composition        | C4, MassiveText         |
+| `alpha_count`            | Alphabetic character count          | Low        | Composition        | General                 |
+| `digit_count`            | Digit character count               | Low        | Composition        | General                 |
+| `ratio_alpha_to_numeric` | Alphabetic-to-digit character ratio | Low        | Composition        | General                 |
+| `non_alphanumeric_count` | Non-alphanumeric character count    | Low        | Composition        | General                 |
+| `non_ascii_count`        | Non-ASCII character count           | Low        | Encoding Quality   | C4, MassiveText         |
+| `ratio_non_ascii`        | Proportion non-ASCII characters     | Low        | Encoding Quality   | C4, MassiveText         |
+| `capital_count`          | Capital letters count               | Low        | Composition        | General                 |
+| `ratio_capital`          | Proportion capital letters          | Low        | Composition        | General                 |
+| `digit_ratio`            | Digit proportion                    | Low        | Composition        | General                 |
+| `punctuation_count`      | Punctuation count                   | Low        | Composition        | General                 |
+| `ratio_punctuation`      | Punctuation proportion              | Low        | Composition        | MassiveText             |
+| `char_entropy`           | Shannon entropy of characters       | Medium     | Information Theory | CCNet, Gigaword Corpora |
+
+### Word-Level Metrics
+
+| Metric                     | Description                       | Complexity | Category   | Example Projects |
+| -------------------------- | --------------------------------- | ---------- | ---------- | ---------------- |
+| `num_words`                | Total words count                 | Low        | Length     | General          |
+| `average_word_length`      | Mean characters per word          | Low        | Complexity | MassiveText      |
+| `num_lines`                | Total lines count                 | Low        | Structure  | General          |
+| `average_line_length`      | Mean characters per line          | Low        | Structure  | MassiveText      |
+| `num_paragraphs`           | Paragraph count (heuristic-based) | Low        | Structure  | General          |
+| `average_paragraph_length` | Mean characters per paragraph     | Low        | Structure  | General          |
+| `avg_sentence_length`      | Average tokens per sentence       | Low        | Complexity | General          |
+
+### Unigram Token Metrics (Word/Punctuation-level)
+
+| Metric                        | Description                          | Complexity | Category           | Example Projects        |
+| ----------------------------- | ------------------------------------ | ---------- | ------------------ | ----------------------- |
+| `unigram_token_count`         | Total word/punctuation token count   | Low        | Tokenization       | General                 |
+| `unique_unigram_count`        | Unique words/punctuation count       | Medium     | Lexical Diversity  | General                 |
+| `unigram_type_token_ratio`    | Word-level lexical diversity         | Medium     | Lexical Diversity  | CCNet, Gigaword Corpora |
+| `unigram_entropy`             | Word distribution Shannon entropy    | Medium     | Information Theory | CCNet, Gigaword Corpora |
+| `max_unigram_frequency_ratio` | Most common word proportion          | Medium     | Lexical Diversity  | General                 |
+| `unigram_repetition_rate`     | Word repetition (1-unique/total)     | Medium     | Lexical Diversity  | C4, MassiveText         |
+
+### Subword Token Metrics (BPE/WordPiece)
+
+| Metric                       | Description                       | Complexity | Category           | Example Projects        |
+| ---------------------------- | --------------------------------- | ---------- | ------------------ | ----------------------- |
+| `subword_token_count`        | Total ML-tokenizer token count    | Low        | Tokenization       | General                 |
+| `unique_subword_count`       | Unique subword tokens count       | Medium     | Lexical Diversity  | General                 |
+| `subword_type_token_ratio`   | Subword-level lexical diversity   | Medium     | Lexical Diversity  | CCNet, Gigaword Corpora |
+| `subword_entropy`            | Subword token Shannon entropy     | Medium     | Information Theory | CCNet, Gigaword Corpora |
+| `subword_repetition_rate`    | Subword repetition (1-unique/total)| Medium     | Lexical Diversity  | C4, MassiveText         |
+| `subword_efficiency`         | Information per subword length    | Medium     | Tokenization Efficiency | Proposed        |
+
+### Content & Structure Metrics
+
+| Metric                 | Description                      | Complexity | Category           | Example Projects |
+| ---------------------- | -------------------------------- | ---------- | ------------------ | ---------------- |
+| `num_copyright`        | Copyright mentions count         | Low        | Content Filtering  | General          |
+| `num_rights_reserved`  | "Rights reserved" mentions count | Low        | Content Filtering  | General          |
+| `num_section_strings`  | Section headings count           | Medium     | Structural Content | General          |
+| `num_question_strings` | Question phrases count           | Medium     | Structural Content | General          |
+| `bullet_ellipsis_ratio`| Bullet/ellipsis lines proportion | Low        | Structural Filtering | MassiveText    |
+
+### Advanced & Statistical Metrics
+
+| Metric               | Description                       | Complexity | Category                 | Example Projects |
+| -------------------- | --------------------------------- | ---------- | ------------------------ | ---------------- |
+| `compression_ratio`  | Original-to-compressed text ratio | Medium     | Information Density      | Proposed         |
+| `zipf_fitness_score` | Adherence to Zipf's law           | Medium     | Linguistic Naturalness   | Proposed         |
+| `burstiness`         | Clustering of token occurrences   | Medium     | Structural Patterns      | Proposed         |
+| `vocab_growth_rate`  | Rate of vocabulary introduction   | Medium     | Lexical Diversity        | Proposed         |
