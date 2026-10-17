@@ -29,7 +29,9 @@ HF_TEST_DATASET = "stanfordnlp/imdb"
 
 def create_test_text_file():
     """Create a temporary text file for testing."""
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", delete=False, suffix=".txt", newline="\n"
+    ) as f:
         f.write("This is a test.\nThis is another test.\n")
     return f.name
 
