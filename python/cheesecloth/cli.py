@@ -141,65 +141,37 @@ def import_time():
     return datetime.datetime.now()
 
 
-# Readability calculation helper functions
+# Readability calculation helper functions (thin wrappers around the Rust
+# implementations, which compute the same score as AllMetrics without building
+# the full get_all_metrics() dictionary)
 def calculate_readability_score(text, include_punctuation=False, case_sensitive=True):
-    """Calculate readability score for a text using the AllMetrics class."""
+    """Calculate the readability score (0.0-1.0) for a text."""
     try:
-        # Get metrics using get_all_metrics
-        metrics_dict = cheesecloth.get_all_metrics(
-            text,
-            include_punctuation=include_punctuation,
-            case_sensitive=case_sensitive,
-            use_paragraph_processing=True,
+        return cheesecloth.calculate_readability_score(
+            text, include_punctuation, case_sensitive
         )
-
-        # Create AllMetrics object
-        all_metrics = AllMetrics.from_dict(metrics_dict)
-
-        # Calculate and return readability score
-        return all_metrics.calculate_readability_score()
     except Exception as e:
         print(f"Error calculating readability score: {e}", file=sys.stderr)
         return 0.0
 
 
 def get_readability_level(text, include_punctuation=False, case_sensitive=True):
-    """Get readability level label for a text using the AllMetrics class."""
+    """Get the readability level label for a text."""
     try:
-        # Get metrics using get_all_metrics
-        metrics_dict = cheesecloth.get_all_metrics(
-            text,
-            include_punctuation=include_punctuation,
-            case_sensitive=case_sensitive,
-            use_paragraph_processing=True,
+        return cheesecloth.get_readability_level(
+            text, include_punctuation, case_sensitive
         )
-
-        # Create AllMetrics object
-        all_metrics = AllMetrics.from_dict(metrics_dict)
-
-        # Get and return readability level
-        return all_metrics.get_readability_level()
     except Exception as e:
         print(f"Error getting readability level: {e}", file=sys.stderr)
         return "Unknown"
 
 
 def get_readability_factors(text, include_punctuation=False, case_sensitive=True):
-    """Get detailed readability factors for a text using the AllMetrics class."""
+    """Get the detailed readability assessment (score, level, factors) for a text."""
     try:
-        # Get metrics using get_all_metrics
-        metrics_dict = cheesecloth.get_all_metrics(
-            text,
-            include_punctuation=include_punctuation,
-            case_sensitive=case_sensitive,
-            use_paragraph_processing=True,
+        return cheesecloth.get_readability_factors(
+            text, include_punctuation, case_sensitive
         )
-
-        # Create AllMetrics object
-        all_metrics = AllMetrics.from_dict(metrics_dict)
-
-        # Get and return readability assessment
-        return all_metrics.get_readability_assessment()
     except Exception as e:
         print(f"Error getting readability factors: {e}", file=sys.stderr)
         return {}
@@ -476,12 +448,16 @@ METRIC_FUNCTIONS = {
     "section_heading_count": cheesecloth.count_section_strings,
     "copyright_mention_count": cheesecloth.count_copyright_mentions,
     "rights_reserved_count": cheesecloth.count_rights_reserved,
-    "bullet_count": lambda text: len(cheesecloth.BULLET_REGEX.findall(text))
-    if hasattr(cheesecloth, "BULLET_REGEX")
-    else 0,
-    "ellipsis_count": lambda text: len(cheesecloth.ELLIPSIS_REGEX.findall(text))
-    if hasattr(cheesecloth, "ELLIPSIS_REGEX")
-    else 0,
+    "bullet_count": lambda text: (
+        len(cheesecloth.BULLET_REGEX.findall(text))
+        if hasattr(cheesecloth, "BULLET_REGEX")
+        else 0
+    ),
+    "ellipsis_count": lambda text: (
+        len(cheesecloth.ELLIPSIS_REGEX.findall(text))
+        if hasattr(cheesecloth, "ELLIPSIS_REGEX")
+        else 0
+    ),
     "bullet_ellipsis_ratio": cheesecloth.bullet_or_ellipsis_lines_ratio,
     "contains_code": cheesecloth.contains_code_characters,
     #
@@ -1622,8 +1598,8 @@ def main():
             # Generate default profiling output filename
             safe_dataset_name = args.dataset.replace("/", "_").replace("\\", "_")
             if args.config:
-                safe_dataset_name += (
-                    f"_{args.config.replace('/', '_').replace('\\', '_')}"
+                safe_dataset_name += "_" + args.config.replace("/", "_").replace(
+                    "\\", "_"
                 )
 
             # Add a suffix to indicate what was profiled

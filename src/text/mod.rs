@@ -6,9 +6,13 @@
 //! ## Key Components
 //!
 //! * `segmentation`: Analysis of text units (lines, paragraphs, sentences)
+//! * `lines`: Line-structure layout metrics (short / duplicate / numeric lines)
+//! * `readability`: Composite readability score built from unigram and segmentation metrics
 //!
 //! The text module bridges character-level and token-level analysis by examining
 //! how characters and tokens are organized into larger linguistic structures,
 //! providing insights into document composition and readability.
 
+pub mod lines;
+pub mod readability;
 pub mod segmentation;

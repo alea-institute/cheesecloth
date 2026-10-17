@@ -268,87 +268,82 @@ fn get_all_char_metrics(py: Python, text: &str) -> PyResult<PyObject> {
     dict.set_item("case_ratio", metrics.case_ratio)?;
     dict.set_item("category_entropy", metrics.category_entropy)?;
 
+    // Control characters that are not whitespace (see CharMetrics docs)
+    dict.set_item(
+        "control_chars_excluding_whitespace",
+        metrics.control_chars_excluding_whitespace,
+    )?;
+    dict.set_item(
+        "ratio_control_chars_excluding_whitespace",
+        metrics.ratio_control_chars_excluding_whitespace,
+    )?;
+
+    // All Unicode category statistics come from a single classification pass
+    let profile = char::categories::category_profile(text);
+    let total = profile.total_chars as f64;
+
     // Add Unicode category ratios
-    let category_ratios = char::categories::category_ratios(text);
     let category_dict = PyDict::new(py);
-    for (category, ratio) in category_ratios {
-        let category_str = char::categories::category_to_string(category).to_string();
-        category_dict.set_item(category_str, ratio)?;
+    for (i, &count) in profile.category_counts.iter().enumerate() {
+        if count > 0 {
+            let category = char::categories::ALL_CATEGORIES[i];
+            category_dict.set_item(
+                char::categories::category_to_string(category),
+                count as f64 / total,
+            )?;
+        }
     }
     dict.set_item("unicode_category_ratios", category_dict)?;
 
     // Add Unicode category group ratios
-    let group_ratios = char::categories::category_group_ratios(text);
     let group_dict = PyDict::new(py);
-    for (group, ratio) in group_ratios {
-        let group_str = char::categories::category_group_to_string(group).to_string();
-        group_dict.set_item(group_str, ratio)?;
+    for (i, &count) in profile.group_counts.iter().enumerate() {
+        if count > 0 {
+            let group = char::categories::ALL_GROUPS[i];
+            group_dict.set_item(
+                char::categories::category_group_to_string(group),
+                count as f64 / total,
+            )?;
+        }
     }
     dict.set_item("unicode_category_group_ratios", group_dict)?;
 
     // Add character frequencies
-    let char_freq = char::unicode::char_frequency(text);
     let char_freq_dict = PyDict::new(py);
-    for (c, freq) in char_freq {
+    for (c, freq) in &metrics.char_frequency {
         char_freq_dict.set_item(c.to_string(), freq)?;
     }
     dict.set_item("char_frequency", char_freq_dict)?;
 
-    // Add Unicode category bigram ratios
-    let category_bigram_ratios = char::categories::category_bigram_ratios(text);
-    let category_bigram_dict = PyDict::new(py);
-    for ((prev_cat, next_cat), ratio) in category_bigram_ratios {
-        // Get a tuple of (prev, next) with clean formatting using START/END for None
-        let prev_str = prev_cat.unwrap_or_else(|| "START".to_string());
-        let next_str = next_cat.unwrap_or_else(|| "END".to_string());
+    // Bigram / trigram ratios use START/END for the text edges
+    let bigram_total = profile.bigram_total() as f64;
+    let trigram_total = profile.trigram_total() as f64;
 
-        // Create a tuple key for Python
-        let key = (prev_str, next_str);
-        category_bigram_dict.set_item(key, ratio)?;
+    let category_bigram_dict = PyDict::new(py);
+    for ((prev, next), count) in &profile.category_bigrams {
+        let key = (prev.unwrap_or("START"), next.unwrap_or("END"));
+        category_bigram_dict.set_item(key, *count as f64 / bigram_total)?;
     }
     dict.set_item("unicode_category_bigram_ratios", category_bigram_dict)?;
 
-    // Add Unicode category group bigram ratios
-    let group_bigram_ratios = char::categories::category_group_bigram_ratios(text);
     let group_bigram_dict = PyDict::new(py);
-    for ((prev_group, next_group), ratio) in group_bigram_ratios {
-        // Get a tuple of (prev, next) with clean formatting using START/END for None
-        let prev_str = prev_group.unwrap_or_else(|| "START".to_string());
-        let next_str = next_group.unwrap_or_else(|| "END".to_string());
-
-        // Create a tuple key for Python
-        let key = (prev_str, next_str);
-        group_bigram_dict.set_item(key, ratio)?;
+    for ((prev, next), count) in &profile.group_bigrams {
+        let key = (prev.unwrap_or("START"), next.unwrap_or("END"));
+        group_bigram_dict.set_item(key, *count as f64 / bigram_total)?;
     }
     dict.set_item("unicode_category_group_bigram_ratios", group_bigram_dict)?;
 
-    // Add Unicode category trigram ratios
-    let category_trigram_ratios = char::categories::category_trigram_ratios(text);
     let category_trigram_dict = PyDict::new(py);
-    for ((prev_cat, current_cat, next_cat), ratio) in category_trigram_ratios {
-        // Get tuple elements with clean formatting using START/END for None
-        let prev_str = prev_cat.unwrap_or_else(|| "START".to_string());
-        let current_str = current_cat;
-        let next_str = next_cat.unwrap_or_else(|| "END".to_string());
-
-        // Create a tuple key for Python
-        let key = (prev_str, current_str, next_str);
-        category_trigram_dict.set_item(key, ratio)?;
+    for ((prev, current, next), count) in &profile.category_trigrams {
+        let key = (prev.unwrap_or("START"), *current, next.unwrap_or("END"));
+        category_trigram_dict.set_item(key, *count as f64 / trigram_total)?;
     }
     dict.set_item("unicode_category_trigram_ratios", category_trigram_dict)?;
 
-    // Add Unicode category group trigram ratios
-    let group_trigram_ratios = char::categories::category_group_trigram_ratios(text);
     let group_trigram_dict = PyDict::new(py);
-    for ((prev_group, current_group, next_group), ratio) in group_trigram_ratios {
-        // Get tuple elements with clean formatting using START/END for None
-        let prev_str = prev_group.unwrap_or_else(|| "START".to_string());
-        let current_str = current_group;
-        let next_str = next_group.unwrap_or_else(|| "END".to_string());
-
-        // Create a tuple key for Python
-        let key = (prev_str, current_str, next_str);
-        group_trigram_dict.set_item(key, ratio)?;
+    for ((prev, current, next), count) in &profile.group_trigrams {
+        let key = (prev.unwrap_or("START"), *current, next.unwrap_or("END"));
+        group_trigram_dict.set_item(key, *count as f64 / trigram_total)?;
     }
     dict.set_item("unicode_category_group_trigram_ratios", group_trigram_dict)?;
 
@@ -874,8 +869,8 @@ fn short_token_ratio(text: &str, include_punctuation: bool, case_sensitive: bool
 #[allow(dead_code)]
 #[pyfunction]
 fn short_token_ratio_with_threshold(
-    text: &str, 
-    include_punctuation: bool, 
+    text: &str,
+    include_punctuation: bool,
     case_sensitive: bool,
     threshold: usize,
 ) -> PyResult<f64> {
@@ -901,8 +896,8 @@ fn long_token_ratio(text: &str, include_punctuation: bool, case_sensitive: bool)
 #[allow(dead_code)]
 #[pyfunction]
 fn long_token_ratio_with_threshold(
-    text: &str, 
-    include_punctuation: bool, 
+    text: &str,
+    include_punctuation: bool,
     case_sensitive: bool,
     threshold: usize,
 ) -> PyResult<f64> {
@@ -1575,6 +1570,170 @@ fn get_all_metrics(
     Ok(result_dict.into())
 }
 
+// Readability metrics
+
+/// Calculates a composite readability score in [0, 1] (higher = harder to read).
+///
+/// Weighted combination of average token length, average sentence length,
+/// average paragraph length and unigram token entropy; identical to
+/// `AllMetrics.calculate_readability_score()`. Pass `average_sentence_length`
+/// to use your own sentence segmentation instead of the built-in estimate.
+#[pyfunction]
+#[pyo3(signature = (text, include_punctuation=false, case_sensitive=true, average_sentence_length=None))]
+fn calculate_readability_score(
+    text: &str,
+    include_punctuation: bool,
+    case_sensitive: bool,
+    average_sentence_length: Option<f64>,
+) -> PyResult<f64> {
+    Ok(text::readability::assess(
+        text,
+        include_punctuation,
+        case_sensitive,
+        average_sentence_length,
+    )
+    .score)
+}
+
+/// Returns the readability level label: "Easy", "Moderate", "Challenging",
+/// "Complex" or "Very Complex".
+#[pyfunction]
+#[pyo3(signature = (text, include_punctuation=false, case_sensitive=true, average_sentence_length=None))]
+fn get_readability_level(
+    text: &str,
+    include_punctuation: bool,
+    case_sensitive: bool,
+    average_sentence_length: Option<f64>,
+) -> PyResult<&'static str> {
+    Ok(text::readability::assess(
+        text,
+        include_punctuation,
+        case_sensitive,
+        average_sentence_length,
+    )
+    .level)
+}
+
+/// Returns the readability score, level and per-factor breakdown, in the same
+/// shape as `AllMetrics.get_readability_assessment()`.
+#[pyfunction]
+#[pyo3(signature = (text, include_punctuation=false, case_sensitive=true, average_sentence_length=None))]
+fn get_readability_factors(
+    py: Python,
+    text: &str,
+    include_punctuation: bool,
+    case_sensitive: bool,
+    average_sentence_length: Option<f64>,
+) -> PyResult<PyObject> {
+    use text::readability as r;
+    let assessment = r::assess(
+        text,
+        include_punctuation,
+        case_sensitive,
+        average_sentence_length,
+    );
+    let factor = |raw: f64, normalized: f64, weight: f64| -> PyResult<Bound<'_, PyDict>> {
+        let d = PyDict::new(py);
+        d.set_item("raw_value", raw)?;
+        d.set_item("normalized_score", normalized)?;
+        d.set_item("weight", weight)?;
+        Ok(d)
+    };
+    let factors = PyDict::new(py);
+    factors.set_item(
+        "word_complexity",
+        factor(
+            assessment.average_token_length,
+            assessment.norm_word_length,
+            r::WORD_LENGTH_WEIGHT,
+        )?,
+    )?;
+    factors.set_item(
+        "sentence_complexity",
+        factor(
+            assessment.average_sentence_length,
+            assessment.norm_sentence_length,
+            r::SENTENCE_LENGTH_WEIGHT,
+        )?,
+    )?;
+    factors.set_item(
+        "paragraph_complexity",
+        factor(
+            assessment.average_paragraph_length,
+            assessment.norm_paragraph_length,
+            r::PARAGRAPH_LENGTH_WEIGHT,
+        )?,
+    )?;
+    factors.set_item(
+        "vocabulary_complexity",
+        factor(
+            assessment.token_entropy,
+            assessment.norm_entropy,
+            r::ENTROPY_WEIGHT,
+        )?,
+    )?;
+    let dict = PyDict::new(py);
+    dict.set_item("score", assessment.score)?;
+    dict.set_item("level", assessment.level)?;
+    dict.set_item("factors", factors)?;
+    Ok(dict.into())
+}
+
+// Line-structure metrics
+
+/// Share of non-empty (stripped) lines with fewer than 5 whitespace-separated words.
+#[pyfunction]
+fn short_line_share(text: &str) -> PyResult<f64> {
+    Ok(text::lines::line_structure_metrics(text).short_line_share)
+}
+
+/// Share of non-empty (stripped) lines ending in `. ! ? : ; " ”`.
+#[pyfunction]
+fn end_punct_share(text: &str) -> PyResult<f64> {
+    Ok(text::lines::line_structure_metrics(text).end_punct_share)
+}
+
+/// Share of non-empty (stripped) lines that duplicate an earlier line.
+#[pyfunction]
+fn dup_line_share(text: &str) -> PyResult<f64> {
+    Ok(text::lines::line_structure_metrics(text).dup_line_share)
+}
+
+/// Share of non-empty (stripped) lines whose non-space characters are mostly
+/// digits or `$%.,()-/:`.
+#[pyfunction]
+fn numeric_line_share(text: &str) -> PyResult<f64> {
+    Ok(text::lines::line_structure_metrics(text).numeric_line_share)
+}
+
+/// Length in code points of the longest stripped non-empty line (0 if none).
+#[pyfunction]
+fn longest_line_length(text: &str) -> PyResult<usize> {
+    Ok(text::lines::line_structure_metrics(text).longest_line)
+}
+
+/// Number of lines that are non-empty after stripping whitespace.
+#[pyfunction]
+fn count_nonempty_lines(text: &str) -> PyResult<usize> {
+    Ok(text::lines::line_structure_metrics(text).n_lines)
+}
+
+/// Computes all line-structure metrics in one pass. Returns a dict with keys
+/// short_line_share, end_punct_share, dup_line_share, numeric_line_share,
+/// longest_line and n_lines.
+#[pyfunction]
+fn get_line_structure_metrics(py: Python, text: &str) -> PyResult<PyObject> {
+    let m = text::lines::line_structure_metrics(text);
+    let dict = PyDict::new(py);
+    dict.set_item("short_line_share", m.short_line_share)?;
+    dict.set_item("end_punct_share", m.end_punct_share)?;
+    dict.set_item("dup_line_share", m.dup_line_share)?;
+    dict.set_item("numeric_line_share", m.numeric_line_share)?;
+    dict.set_item("longest_line", m.longest_line)?;
+    dict.set_item("n_lines", m.n_lines)?;
+    Ok(dict.into())
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1656,6 +1815,20 @@ fn cheesecloth(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_all_char_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_pattern_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(get_all_metrics, m)?)?;
+
+    // Readability metrics
+    m.add_function(wrap_pyfunction!(calculate_readability_score, m)?)?;
+    m.add_function(wrap_pyfunction!(get_readability_level, m)?)?;
+    m.add_function(wrap_pyfunction!(get_readability_factors, m)?)?;
+
+    // Line-structure metrics
+    m.add_function(wrap_pyfunction!(short_line_share, m)?)?;
+    m.add_function(wrap_pyfunction!(end_punct_share, m)?)?;
+    m.add_function(wrap_pyfunction!(dup_line_share, m)?)?;
+    m.add_function(wrap_pyfunction!(numeric_line_share, m)?)?;
+    m.add_function(wrap_pyfunction!(longest_line_length, m)?)?;
+    m.add_function(wrap_pyfunction!(count_nonempty_lines, m)?)?;
+    m.add_function(wrap_pyfunction!(get_line_structure_metrics, m)?)?;
 
     // Text segmentation functions
     m.add_function(wrap_pyfunction!(split_words, m)?)?;

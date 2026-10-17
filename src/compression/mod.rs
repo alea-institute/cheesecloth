@@ -38,7 +38,7 @@ pub fn calculate_compression_ratio(text: &str) -> io::Result<f64> {
         return Ok(1.0);
     }
 
-    let original_size = text.as_bytes().len();
+    let original_size = text.len();
 
     // Create a DeflateEncoder with maximum compression
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::best());

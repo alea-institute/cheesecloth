@@ -10,7 +10,7 @@ license = "MIT"
 homepage = "https://aleainstitute.ai/"
 repository = "https://github.com/alea-institute/cheesecloth"
 keywords = ["alea", "llm", "data", "cheesecloth", "kl3m"]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -26,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -70,3 +71,15 @@ disable = [
 [tool.pylint."TYPECHECK"]
 # List of members which are set dynamically and missed by pylint inference system
 generated-members = "cheesecloth.*"
+[tool.ruff]
+target-version = "py310"
+include = ["python/**/*.py", "python/**/*.pyi", "examples/**/*.py"]
+
+[tool.ruff.lint]
+# pycodestyle errors + pyflakes (ruff's defaults), pinned explicitly so results
+# do not depend on a user-level ruff configuration
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# The package re-exports the compiled module with a star import
+"python/cheesecloth/__init__.py" = ["F401", "F403", "F405", "E402"]

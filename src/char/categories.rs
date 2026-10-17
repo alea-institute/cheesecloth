@@ -17,11 +17,9 @@
 //! character distribution patterns.
 
 use icu_properties::{maps, GeneralCategory};
-use lru::LruCache;
-use rayon::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
+use std::sync::OnceLock;
 
 /// Unicode character category enum
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
@@ -70,62 +68,60 @@ pub enum UnicodeCategoryGroup {
     C, // Other
 }
 
-// Initialize the thread-local LRU caches with capacity of 4096 entries
-// This size provides an optimal balance between memory usage and cache hit rate
-thread_local! {
-    // Cache for char to UnicodeCategory lookups
-    // Using a cache of 4096 entries to balance memory usage with hit rate
-    static CATEGORY_CACHE: RefCell<LruCache<char, UnicodeCategory>> =
-        RefCell::new(LruCache::new(NonZeroUsize::new(4096).unwrap()));
+/// Number of distinct Unicode general categories ([`UnicodeCategory`] variants).
+pub const NUM_CATEGORIES: usize = 30;
 
-    // Cache for char to UnicodeCategoryGroup lookups
-    // Using a cache of 4096 entries to balance memory usage with hit rate
-    static CATEGORY_GROUP_CACHE: RefCell<LruCache<char, UnicodeCategoryGroup>> =
-        RefCell::new(LruCache::new(NonZeroUsize::new(4096).unwrap()));
-}
+/// Number of distinct Unicode category groups ([`UnicodeCategoryGroup`] variants).
+pub const NUM_GROUPS: usize = 7;
 
-/// Convert a character to its Unicode category with efficient caching for common characters
-pub fn char_to_category(ch: char) -> UnicodeCategory {
-    // Fast path for ASCII range (most common in typical text)
-    // This avoids the expensive ICU lookup for common characters
-    if ch as u32 <= 127 {
-        match ch {
-            'a'..='z' => return UnicodeCategory::Ll,
-            'A'..='Z' => return UnicodeCategory::Lu,
-            '0'..='9' => return UnicodeCategory::Nd,
-            ' ' | '\t' | '\n' | '\r' | '\x0C' => return UnicodeCategory::Zs,
-            '.' | ',' | ';' | ':' | '!' | '?' => return UnicodeCategory::Po,
-            '(' | '[' | '{' => return UnicodeCategory::Ps,
-            ')' | ']' | '}' => return UnicodeCategory::Pe,
-            '+' | '-' | '*' | '/' | '%' | '=' | '<' | '>' => return UnicodeCategory::Sm,
-            '$' => return UnicodeCategory::Sc,
-            '_' => return UnicodeCategory::Pc,
-            '#' | '@' | '&' | '^' => return UnicodeCategory::Po,
-            '\"' | '\'' => return UnicodeCategory::Po,
-            // Fall through to cache/ICU lookup for other ASCII
-            _ => {}
-        }
-    }
+/// All categories in enum-discriminant order (`ALL_CATEGORIES[c as usize] == c`).
+pub const ALL_CATEGORIES: [UnicodeCategory; NUM_CATEGORIES] = [
+    UnicodeCategory::Ll,
+    UnicodeCategory::Lu,
+    UnicodeCategory::Lt,
+    UnicodeCategory::Lm,
+    UnicodeCategory::Lo,
+    UnicodeCategory::Mn,
+    UnicodeCategory::Mc,
+    UnicodeCategory::Me,
+    UnicodeCategory::Nd,
+    UnicodeCategory::Nl,
+    UnicodeCategory::No,
+    UnicodeCategory::Pc,
+    UnicodeCategory::Pd,
+    UnicodeCategory::Ps,
+    UnicodeCategory::Pe,
+    UnicodeCategory::Pi,
+    UnicodeCategory::Pf,
+    UnicodeCategory::Po,
+    UnicodeCategory::Sm,
+    UnicodeCategory::Sc,
+    UnicodeCategory::Sk,
+    UnicodeCategory::So,
+    UnicodeCategory::Zs,
+    UnicodeCategory::Zl,
+    UnicodeCategory::Zp,
+    UnicodeCategory::Cc,
+    UnicodeCategory::Cf,
+    UnicodeCategory::Cs,
+    UnicodeCategory::Co,
+    UnicodeCategory::Cn,
+];
 
-    // For non-ASCII characters, first check the thread-local cache
-    // This avoids the expensive ICU lookup for repeated characters
-    let mut category = None;
+/// All category groups in enum-discriminant order.
+pub const ALL_GROUPS: [UnicodeCategoryGroup; NUM_GROUPS] = [
+    UnicodeCategoryGroup::L,
+    UnicodeCategoryGroup::M,
+    UnicodeCategoryGroup::N,
+    UnicodeCategoryGroup::P,
+    UnicodeCategoryGroup::S,
+    UnicodeCategoryGroup::Z,
+    UnicodeCategoryGroup::C,
+];
 
-    // Try to get from cache first
-    CATEGORY_CACHE.with(|cache| {
-        let mut cache_ref = cache.borrow_mut();
-        if let Some(&cached_category) = cache_ref.get(&ch) {
-            category = Some(cached_category);
-        }
-    });
-
-    // Return early if found in cache
-    if let Some(cat) = category {
-        return cat;
-    }
-
-    // For cache miss, use the ICU lookup
-    let result = match maps::general_category().get(ch) {
+/// Map an ICU general category onto our enum.
+fn from_icu(category: GeneralCategory) -> UnicodeCategory {
+    match category {
         GeneralCategory::LowercaseLetter => UnicodeCategory::Ll,
         GeneralCategory::UppercaseLetter => UnicodeCategory::Lu,
         GeneralCategory::TitlecaseLetter => UnicodeCategory::Lt,
@@ -156,15 +152,38 @@ pub fn char_to_category(ch: char) -> UnicodeCategory {
         GeneralCategory::Surrogate => UnicodeCategory::Cs,
         GeneralCategory::PrivateUse => UnicodeCategory::Co,
         GeneralCategory::Unassigned => UnicodeCategory::Cn,
-    };
+    }
+}
 
-    // Add to cache
-    CATEGORY_CACHE.with(|cache| {
-        let mut cache_ref = cache.borrow_mut();
-        cache_ref.put(ch, result);
-    });
+/// Lookup table for the Latin-1 range (U+0000..=U+00FF), built once from ICU data.
+fn latin1_table() -> &'static [UnicodeCategory; 256] {
+    static TABLE: OnceLock<[UnicodeCategory; 256]> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let map = maps::general_category();
+        let mut table = [UnicodeCategory::Cn; 256];
+        for (i, slot) in table.iter_mut().enumerate() {
+            // Every value in 0..=255 is a valid scalar value
+            let ch = char::from_u32(i as u32).unwrap_or('\0');
+            *slot = from_icu(map.get(ch));
+        }
+        table
+    })
+}
 
-    result
+/// Convert a character to its Unicode general category.
+///
+/// The result always agrees with the Unicode Character Database (as shipped with
+/// ICU4X), e.g. `'\n'`, `'\t'` and `'\r'` are `Cc` (control), `'-'` is `Pd`, and
+/// `'^'` is `Sk`. Latin-1 characters use a precomputed table; other characters
+/// use ICU's code point trie, which is a constant-time lookup.
+#[inline]
+pub fn char_to_category(ch: char) -> UnicodeCategory {
+    let cp = ch as u32;
+    if cp < 256 {
+        latin1_table()[cp as usize]
+    } else {
+        from_icu(maps::general_category().get(ch))
+    }
 }
 
 /// Convert a Unicode category to its group - optimized with a direct lookup table
@@ -212,51 +231,6 @@ pub fn category_to_group(category: UnicodeCategory) -> UnicodeCategoryGroup {
 
     // Use the enum discriminant as an index into the lookup table
     GROUPS[category as usize]
-}
-
-/// Convert a character directly to its Unicode category group with optimized inline caching
-pub fn char_to_category_group(ch: char) -> UnicodeCategoryGroup {
-    // Fast path for ASCII with inline category mapping to avoid double lookups
-    if ch as u32 <= 127 {
-        match ch {
-            'a'..='z' | 'A'..='Z' => return UnicodeCategoryGroup::L, // Letters
-            '0'..='9' => return UnicodeCategoryGroup::N,             // Numbers
-            ' ' | '\t' | '\n' | '\r' | '\x0C' => return UnicodeCategoryGroup::Z, // Whitespace
-            '.' | ',' | ';' | ':' | '!' | '?' | '(' | '[' | '{' | ')' | ']' | '}' | '#' | '@'
-            | '&' | '^' | '\"' | '\'' => return UnicodeCategoryGroup::P, // Punctuation
-            '+' | '-' | '*' | '/' | '%' | '=' | '<' | '>' | '$' => return UnicodeCategoryGroup::S, // Symbols
-            '_' => return UnicodeCategoryGroup::P, // Underscore is punctuation
-            _ => {}                                // Fall through for other ASCII
-        }
-    }
-
-    // For non-ASCII characters, first check the thread-local cache
-    // This avoids the expensive category lookup and group mapping for repeated characters
-    let mut group = None;
-
-    // Try to get from cache first
-    CATEGORY_GROUP_CACHE.with(|cache| {
-        let mut cache_ref = cache.borrow_mut();
-        if let Some(&cached_group) = cache_ref.get(&ch) {
-            group = Some(cached_group);
-        }
-    });
-
-    // Return early if found in cache
-    if let Some(g) = group {
-        return g;
-    }
-
-    // For cache miss, get category first then map to group
-    let result = category_to_group(char_to_category(ch));
-
-    // Add to cache
-    CATEGORY_GROUP_CACHE.with(|cache| {
-        let mut cache_ref = cache.borrow_mut();
-        cache_ref.put(ch, result);
-    });
-
-    result
 }
 
 /// Get the string representation of a Unicode category
@@ -308,142 +282,251 @@ pub fn category_group_to_string(group: UnicodeCategoryGroup) -> &'static str {
     }
 }
 
+/// Convert a character directly to its Unicode category group
+#[inline]
+pub fn char_to_category_group(ch: char) -> UnicodeCategoryGroup {
+    category_to_group(char_to_category(ch))
+}
+
 /// Convert a string to a vector of Unicode categories
 pub fn to_category_vector(text: &str) -> Vec<UnicodeCategory> {
-    text.chars()
-        .collect::<Vec<char>>()
-        .par_iter()
-        .map(|&c| char_to_category(c))
-        .collect()
+    text.chars().map(char_to_category).collect()
 }
 
 /// Convert a string to a vector of Unicode category groups
 pub fn to_category_group_vector(text: &str) -> Vec<UnicodeCategoryGroup> {
-    text.chars()
-        .collect::<Vec<char>>()
-        .par_iter()
-        .map(|&c| char_to_category_group(c))
+    text.chars().map(char_to_category_group).collect()
+}
+
+/// Category index (enum discriminant) of every character in `text`.
+fn category_index_sequence(text: &str) -> Vec<u8> {
+    text.chars().map(|c| char_to_category(c) as u8).collect()
+}
+
+/// Map a category index sequence onto group indices.
+fn group_index_sequence(categories: &[u8]) -> Vec<u8> {
+    categories
+        .iter()
+        .map(|&c| category_to_group(ALL_CATEGORIES[c as usize]) as u8)
         .collect()
 }
 
-/// Count the occurrences of each Unicode category in a string - efficient implementation
-pub fn count_categories(text: &str) -> HashMap<UnicodeCategory, usize> {
-    let mut counts = HashMap::new();
-
-    // Process text in parallel for larger texts, sequential for smaller ones
-    if text.len() > 10000 {
-        // For larger texts, use parallel processing
-        let char_vec: Vec<char> = text.chars().collect();
-        let category_counts = char_vec
-            .par_iter()
-            .map(|&c| char_to_category(c))
-            .fold(
-                HashMap::new,
-                |mut acc, category| {
-                    *acc.entry(category).or_insert(0) += 1;
-                    acc
-                },
-            )
-            .reduce(
-                HashMap::new,
-                |mut acc, partial| {
-                    for (k, v) in partial {
-                        *acc.entry(k).or_insert(0) += v;
-                    }
-                    acc
-                },
-            );
-
-        counts = category_counts;
-    } else {
-        // For smaller texts, use direct sequential processing
-        for c in text.chars() {
-            *counts.entry(char_to_category(c)).or_insert(0) += 1;
-        }
+/// Dense per-category counts for `text`.
+fn category_count_array(text: &str) -> ([usize; NUM_CATEGORIES], usize) {
+    let mut counts = [0usize; NUM_CATEGORIES];
+    let mut total = 0usize;
+    for c in text.chars() {
+        counts[char_to_category(c) as usize] += 1;
+        total += 1;
     }
-
-    counts
+    (counts, total)
 }
 
-/// Count the occurrences of each Unicode category group in a string - efficient implementation
-pub fn count_category_groups(text: &str) -> HashMap<UnicodeCategoryGroup, usize> {
-    let mut counts = HashMap::new();
+/// Collapse dense category counts into dense group counts.
+fn group_counts_from_categories(counts: &[usize; NUM_CATEGORIES]) -> [usize; NUM_GROUPS] {
+    let mut groups = [0usize; NUM_GROUPS];
+    for (i, &count) in counts.iter().enumerate() {
+        groups[category_to_group(ALL_CATEGORIES[i]) as usize] += count;
+    }
+    groups
+}
 
-    // Pre-initialize with all possible groups for more efficient insertions
-    counts.insert(UnicodeCategoryGroup::L, 0);
-    counts.insert(UnicodeCategoryGroup::M, 0);
-    counts.insert(UnicodeCategoryGroup::N, 0);
-    counts.insert(UnicodeCategoryGroup::P, 0);
-    counts.insert(UnicodeCategoryGroup::S, 0);
-    counts.insert(UnicodeCategoryGroup::Z, 0);
-    counts.insert(UnicodeCategoryGroup::C, 0);
+// Scratch space for sparse n-gram counting. Category trigrams have 31^3 possible
+// keys (30 categories plus the START/END edge marker); allocating and scanning a
+// table that size for every document would dominate the cost for short texts, so
+// a per-thread table is reused and only the touched slots are reset.
+thread_local! {
+    static NGRAM_SCRATCH: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+}
 
-    // Process text in parallel for larger texts, sequential for smaller ones
-    if text.len() > 10000 {
-        // For larger texts, use parallel processing with Rayon
-        let char_vec: Vec<char> = text.chars().collect();
-        let group_counts = char_vec
-            .par_iter()
-            .fold(
-                || {
-                    let mut map = HashMap::new();
-                    map.insert(UnicodeCategoryGroup::L, 0);
-                    map.insert(UnicodeCategoryGroup::M, 0);
-                    map.insert(UnicodeCategoryGroup::N, 0);
-                    map.insert(UnicodeCategoryGroup::P, 0);
-                    map.insert(UnicodeCategoryGroup::S, 0);
-                    map.insert(UnicodeCategoryGroup::Z, 0);
-                    map.insert(UnicodeCategoryGroup::C, 0);
-                    map
-                },
-                |mut acc, &c| {
-                    let group = char_to_category_group(c);
-                    *acc.get_mut(&group).unwrap() += 1;
-                    acc
-                },
-            )
-            .reduce(
-                || {
-                    let mut map = HashMap::new();
-                    map.insert(UnicodeCategoryGroup::L, 0);
-                    map.insert(UnicodeCategoryGroup::M, 0);
-                    map.insert(UnicodeCategoryGroup::N, 0);
-                    map.insert(UnicodeCategoryGroup::P, 0);
-                    map.insert(UnicodeCategoryGroup::S, 0);
-                    map.insert(UnicodeCategoryGroup::Z, 0);
-                    map.insert(UnicodeCategoryGroup::C, 0);
-                    map
-                },
-                |mut acc, partial| {
-                    for (k, v) in partial {
-                        *acc.get_mut(&k).unwrap() += v;
-                    }
-                    acc
-                },
-            );
+/// Count bigrams (with START/END edges) or trigrams over an index sequence whose
+/// values are all `< edge`. The value `edge` marks the START/END position. Returns
+/// the non-zero entries as (packed key, count) in first-seen order.
+fn sparse_ngram_counts(seq: &[u8], edge: usize, order: usize) -> Vec<(usize, usize)> {
+    let n = seq.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let slots = edge + 1;
+    let size = slots.pow(order as u32);
+    NGRAM_SCRATCH.with(|cell| {
+        let mut counts = cell.borrow_mut();
+        if counts.len() < size {
+            counts.resize(size, 0);
+        }
+        let counts: &mut [usize] = &mut counts[..];
+        let mut touched: Vec<usize> = Vec::new();
+        let mut bump = |idx: usize| {
+            if counts[idx] == 0 {
+                touched.push(idx);
+            }
+            counts[idx] += 1;
+        };
+        if order == 2 {
+            // (START, c0), (c0, c1), ..., (c_{n-1}, END)
+            bump(edge * slots + seq[0] as usize);
+            for w in seq.windows(2) {
+                bump(w[0] as usize * slots + w[1] as usize);
+            }
+            bump(seq[n - 1] as usize * slots + edge);
+        } else {
+            // One trigram per character: (prev or START, current, next or END)
+            for i in 0..n {
+                let prev = if i == 0 { edge } else { seq[i - 1] as usize };
+                let next = if i + 1 == n {
+                    edge
+                } else {
+                    seq[i + 1] as usize
+                };
+                bump((prev * slots + seq[i] as usize) * slots + next);
+            }
+        }
+        touched
+            .into_iter()
+            .map(|idx| {
+                let count = counts[idx];
+                counts[idx] = 0;
+                (idx, count)
+            })
+            .collect()
+    })
+}
 
-        counts = group_counts;
-    } else {
-        // For smaller texts, use direct sequential processing with pre-initialized counts
-        for c in text.chars() {
-            let group = char_to_category_group(c);
-            *counts.get_mut(&group).unwrap() += 1;
+/// A category bigram key; `None` marks the START (first) or END (second) edge.
+pub type CategoryBigram = (Option<&'static str>, Option<&'static str>);
+
+/// A category trigram key; `None` marks the START (first) or END (third) edge.
+pub type CategoryTrigram = (Option<&'static str>, &'static str, Option<&'static str>);
+
+fn category_name(idx: usize) -> Option<&'static str> {
+    ALL_CATEGORIES.get(idx).map(|&c| category_to_string(c))
+}
+
+fn group_name(idx: usize) -> Option<&'static str> {
+    ALL_GROUPS.get(idx).map(|&g| category_group_to_string(g))
+}
+
+fn decode_bigrams(
+    counts: Vec<(usize, usize)>,
+    edge: usize,
+    name: fn(usize) -> Option<&'static str>,
+) -> Vec<(CategoryBigram, usize)> {
+    let slots = edge + 1;
+    counts
+        .into_iter()
+        .map(|(idx, count)| ((name(idx / slots), name(idx % slots)), count))
+        .collect()
+}
+
+fn decode_trigrams(
+    counts: Vec<(usize, usize)>,
+    edge: usize,
+    name: fn(usize) -> Option<&'static str>,
+) -> Vec<(CategoryTrigram, usize)> {
+    let slots = edge + 1;
+    counts
+        .into_iter()
+        .map(|(idx, count)| {
+            let next = idx % slots;
+            let current = (idx / slots) % slots;
+            let prev = idx / (slots * slots);
+            // The middle position is always a real character, never an edge
+            let current_name = name(current).unwrap_or("");
+            ((name(prev), current_name, name(next)), count)
+        })
+        .collect()
+}
+
+/// All Unicode category statistics for a text, computed from a single
+/// classification pass: per-category and per-group counts plus the non-zero
+/// category / group bigrams and trigrams (with START/END edges).
+pub struct CategoryProfile {
+    pub total_chars: usize,
+    pub category_counts: [usize; NUM_CATEGORIES],
+    pub group_counts: [usize; NUM_GROUPS],
+    pub category_bigrams: Vec<(CategoryBigram, usize)>,
+    pub group_bigrams: Vec<(CategoryBigram, usize)>,
+    pub category_trigrams: Vec<(CategoryTrigram, usize)>,
+    pub group_trigrams: Vec<(CategoryTrigram, usize)>,
+}
+
+impl CategoryProfile {
+    /// Total number of bigrams (`n + 1` for a non-empty text of `n` chars).
+    pub fn bigram_total(&self) -> usize {
+        if self.total_chars == 0 {
+            0
+        } else {
+            self.total_chars + 1
         }
     }
 
-    // Remove any groups with zero counts
-    counts.retain(|_, &mut count| count > 0);
+    /// Total number of trigrams (one per character).
+    pub fn trigram_total(&self) -> usize {
+        self.total_chars
+    }
+}
 
+/// Compute a [`CategoryProfile`] for `text`.
+pub fn category_profile(text: &str) -> CategoryProfile {
+    let cats = category_index_sequence(text);
+    let groups = group_index_sequence(&cats);
+    let mut category_counts = [0usize; NUM_CATEGORIES];
+    for &c in &cats {
+        category_counts[c as usize] += 1;
+    }
+    let group_counts = group_counts_from_categories(&category_counts);
+    CategoryProfile {
+        total_chars: cats.len(),
+        category_counts,
+        group_counts,
+        category_bigrams: decode_bigrams(
+            sparse_ngram_counts(&cats, NUM_CATEGORIES, 2),
+            NUM_CATEGORIES,
+            category_name,
+        ),
+        group_bigrams: decode_bigrams(
+            sparse_ngram_counts(&groups, NUM_GROUPS, 2),
+            NUM_GROUPS,
+            group_name,
+        ),
+        category_trigrams: decode_trigrams(
+            sparse_ngram_counts(&cats, NUM_CATEGORIES, 3),
+            NUM_CATEGORIES,
+            category_name,
+        ),
+        group_trigrams: decode_trigrams(
+            sparse_ngram_counts(&groups, NUM_GROUPS, 3),
+            NUM_GROUPS,
+            group_name,
+        ),
+    }
+}
+
+/// Count the occurrences of each Unicode category in a string (non-zero entries only)
+pub fn count_categories(text: &str) -> HashMap<UnicodeCategory, usize> {
+    let (counts, _) = category_count_array(text);
     counts
+        .iter()
+        .enumerate()
+        .filter(|(_, &count)| count > 0)
+        .map(|(i, &count)| (ALL_CATEGORIES[i], count))
+        .collect()
+}
+
+/// Count the occurrences of each Unicode category group in a string (non-zero entries only)
+pub fn count_category_groups(text: &str) -> HashMap<UnicodeCategoryGroup, usize> {
+    let (counts, _) = category_count_array(text);
+    group_counts_from_categories(&counts)
+        .iter()
+        .enumerate()
+        .filter(|(_, &count)| count > 0)
+        .map(|(i, &count)| (ALL_GROUPS[i], count))
+        .collect()
 }
 
 /// Get efficient string-based frequency counts of Unicode categories
 pub fn category_string_frequency(text: &str) -> HashMap<String, usize> {
-    // First get the category counts using the efficient implementation
-    let category_counts = count_categories(text);
-
-    // Then convert category keys to strings for Python compatibility
-    category_counts
+    count_categories(text)
         .into_iter()
         .map(|(category, count)| (category_to_string(category).to_string(), count))
         .collect()
@@ -451,11 +534,7 @@ pub fn category_string_frequency(text: &str) -> HashMap<String, usize> {
 
 /// Get efficient string-based frequency counts of Unicode category groups
 pub fn category_group_string_frequency(text: &str) -> HashMap<String, usize> {
-    // First get the category group counts using the efficient implementation
-    let group_counts = count_category_groups(text);
-
-    // Then convert group keys to strings for Python compatibility
-    group_counts
+    count_category_groups(text)
         .into_iter()
         .map(|(group, count)| (category_group_to_string(group).to_string(), count))
         .collect()
@@ -463,31 +542,31 @@ pub fn category_group_string_frequency(text: &str) -> HashMap<String, usize> {
 
 /// Count the ratio of each Unicode category in a string
 pub fn category_ratios(text: &str) -> HashMap<UnicodeCategory, f64> {
-    let counts = count_categories(text);
-    let total = text.chars().count() as f64;
-
-    if total == 0.0 {
+    let (counts, total) = category_count_array(text);
+    if total == 0 {
         return HashMap::new();
     }
-
+    let total = total as f64;
     counts
-        .into_iter()
-        .map(|(k, v)| (k, v as f64 / total))
+        .iter()
+        .enumerate()
+        .filter(|(_, &count)| count > 0)
+        .map(|(i, &count)| (ALL_CATEGORIES[i], count as f64 / total))
         .collect()
 }
 
 /// Count the ratio of each Unicode category group in a string
 pub fn category_group_ratios(text: &str) -> HashMap<UnicodeCategoryGroup, f64> {
-    let counts = count_category_groups(text);
-    let total = text.chars().count() as f64;
-
-    if total == 0.0 {
+    let (counts, total) = category_count_array(text);
+    if total == 0 {
         return HashMap::new();
     }
-
-    counts
-        .into_iter()
-        .map(|(k, v)| (k, v as f64 / total))
+    let total = total as f64;
+    group_counts_from_categories(&counts)
+        .iter()
+        .enumerate()
+        .filter(|(_, &count)| count > 0)
+        .map(|(i, &count)| (ALL_GROUPS[i], count as f64 / total))
         .collect()
 }
 
@@ -498,141 +577,34 @@ pub fn category_group_ratios(text: &str) -> HashMap<UnicodeCategoryGroup, f64> {
 pub fn calculate_category_bigrams(
     text: &str,
 ) -> Vec<(Option<UnicodeCategory>, Option<UnicodeCategory>)> {
-    let chars: Vec<char> = text.chars().collect();
-
-    if chars.is_empty() {
+    let categories = to_category_vector(text);
+    if categories.is_empty() {
         return Vec::new();
     }
-
-    // Special case for single character
-    if chars.len() == 1 {
-        let cat = char_to_category(chars[0]);
-        return vec![(None, Some(cat)), (Some(cat), None)];
-    }
-
-    let categories: Vec<UnicodeCategory> = chars.iter().map(|&c| char_to_category(c)).collect();
-    let mut bigrams = Vec::with_capacity(chars.len() + 1);
-
-    // First character: (None, Char1)
+    let mut bigrams = Vec::with_capacity(categories.len() + 1);
     bigrams.push((None, Some(categories[0])));
-
-    // All adjacent character pairs: (Char_i, Char_i+1)
     for window in categories.windows(2) {
-        if window.len() == 2 {
-            bigrams.push((Some(window[0]), Some(window[1])));
-        }
+        bigrams.push((Some(window[0]), Some(window[1])));
     }
-
-    // Last character: (CharN, None)
     bigrams.push((Some(categories[categories.len() - 1]), None));
-
     bigrams
-}
-
-/// Count the frequencies of Unicode category bigrams in a text
-pub fn count_category_bigrams(text: &str) -> HashMap<(Option<String>, Option<String>), usize> {
-    let bigrams = calculate_category_bigrams(text);
-    let mut counts = HashMap::new();
-
-    for (prev_cat, next_cat) in bigrams {
-        // Convert categories to strings, using None where appropriate
-        let prev_cat_str = prev_cat.map(|c| category_to_string(c).to_string());
-        let next_cat_str = next_cat.map(|c| category_to_string(c).to_string());
-
-        // Increment the count for this bigram
-        *counts.entry((prev_cat_str, next_cat_str)).or_insert(0) += 1;
-    }
-
-    counts
-}
-
-/// Calculate the ratios of Unicode category bigrams in a text
-pub fn category_bigram_ratios(text: &str) -> HashMap<(Option<String>, Option<String>), f64> {
-    let counts = count_category_bigrams(text);
-
-    // For bigrams, the total count should be the sum of all bigram counts
-    let total: usize = counts.values().sum();
-
-    if total == 0 {
-        return HashMap::new();
-    }
-
-    counts
-        .into_iter()
-        .map(|(k, v)| (k, v as f64 / total as f64))
-        .collect()
 }
 
 /// Calculate bigrams of Unicode category groups in a text
 pub fn calculate_category_group_bigrams(
     text: &str,
 ) -> Vec<(Option<UnicodeCategoryGroup>, Option<UnicodeCategoryGroup>)> {
-    let chars: Vec<char> = text.chars().collect();
-
-    if chars.is_empty() {
+    let groups = to_category_group_vector(text);
+    if groups.is_empty() {
         return Vec::new();
     }
-
-    // Special case for single character
-    if chars.len() == 1 {
-        let group = char_to_category_group(chars[0]);
-        return vec![(None, Some(group)), (Some(group), None)];
-    }
-
-    let groups: Vec<UnicodeCategoryGroup> =
-        chars.iter().map(|&c| char_to_category_group(c)).collect();
-    let mut bigrams = Vec::with_capacity(chars.len() + 1);
-
-    // First character: (None, Group1)
+    let mut bigrams = Vec::with_capacity(groups.len() + 1);
     bigrams.push((None, Some(groups[0])));
-
-    // All adjacent character pairs: (Group_i, Group_i+1)
     for window in groups.windows(2) {
-        if window.len() == 2 {
-            bigrams.push((Some(window[0]), Some(window[1])));
-        }
+        bigrams.push((Some(window[0]), Some(window[1])));
     }
-
-    // Last character: (GroupN, None)
     bigrams.push((Some(groups[groups.len() - 1]), None));
-
     bigrams
-}
-
-/// Count the frequencies of Unicode category group bigrams in a text
-pub fn count_category_group_bigrams(
-    text: &str,
-) -> HashMap<(Option<String>, Option<String>), usize> {
-    let bigrams = calculate_category_group_bigrams(text);
-    let mut counts = HashMap::new();
-
-    for (prev_group, next_group) in bigrams {
-        // Convert category groups to strings, using None where appropriate
-        let prev_group_str = prev_group.map(|g| category_group_to_string(g).to_string());
-        let next_group_str = next_group.map(|g| category_group_to_string(g).to_string());
-
-        // Increment the count for this bigram
-        *counts.entry((prev_group_str, next_group_str)).or_insert(0) += 1;
-    }
-
-    counts
-}
-
-/// Calculate the ratios of Unicode category group bigrams in a text
-pub fn category_group_bigram_ratios(text: &str) -> HashMap<(Option<String>, Option<String>), f64> {
-    let counts = count_category_group_bigrams(text);
-
-    // For bigrams, the total count should be the sum of all bigram counts
-    let total: usize = counts.values().sum();
-
-    if total == 0 {
-        return HashMap::new();
-    }
-
-    counts
-        .into_iter()
-        .map(|(k, v)| (k, v as f64 / total as f64))
-        .collect()
 }
 
 /// Calculate trigrams of Unicode categories in a text
@@ -645,85 +617,22 @@ pub fn calculate_category_trigrams(
     UnicodeCategory,
     Option<UnicodeCategory>,
 )> {
-    let chars: Vec<char> = text.chars().collect();
-
-    if chars.is_empty() {
-        return Vec::new();
-    }
-
-    // Special case for single character
-    if chars.len() == 1 {
-        let cat = char_to_category(chars[0]);
-        return vec![(None, cat, None)];
-    }
-
-    // Special case for two characters
-    if chars.len() == 2 {
-        let cat1 = char_to_category(chars[0]);
-        let cat2 = char_to_category(chars[1]);
-        return vec![(None, cat1, Some(cat2)), (Some(cat1), cat2, None)];
-    }
-
-    let categories: Vec<UnicodeCategory> = chars.iter().map(|&c| char_to_category(c)).collect();
-    let mut trigrams = Vec::with_capacity(chars.len());
-
-    // First character: (None, Char1, Char2)
-    trigrams.push((None, categories[0], Some(categories[1])));
-
-    // Middle characters: (Char_i-1, Char_i, Char_i+1)
-    for i in 1..categories.len() - 1 {
-        trigrams.push((
-            Some(categories[i - 1]),
-            categories[i],
-            Some(categories[i + 1]),
-        ));
-    }
-
-    // Last character: (CharN-1, CharN, None)
-    let last_idx = categories.len() - 1;
-    trigrams.push((Some(categories[last_idx - 1]), categories[last_idx], None));
-
-    trigrams
-}
-
-/// Count the frequencies of Unicode category trigrams in a text
-pub fn count_category_trigrams(
-    text: &str,
-) -> HashMap<(Option<String>, String, Option<String>), usize> {
-    let trigrams = calculate_category_trigrams(text);
-    let mut counts = HashMap::new();
-
-    for (prev_cat, current_cat, next_cat) in trigrams {
-        // Convert categories to strings, using None where appropriate
-        let prev_cat_str = prev_cat.map(|c| category_to_string(c).to_string());
-        let current_cat_str = category_to_string(current_cat).to_string();
-        let next_cat_str = next_cat.map(|c| category_to_string(c).to_string());
-
-        // Increment the count for this trigram
-        *counts
-            .entry((prev_cat_str, current_cat_str, next_cat_str))
-            .or_insert(0) += 1;
-    }
-
-    counts
-}
-
-/// Calculate the ratios of Unicode category trigrams in a text
-pub fn category_trigram_ratios(
-    text: &str,
-) -> HashMap<(Option<String>, String, Option<String>), f64> {
-    let counts = count_category_trigrams(text);
-
-    // For trigrams, the total count should be the sum of all trigram counts
-    let total: usize = counts.values().sum();
-
-    if total == 0 {
-        return HashMap::new();
-    }
-
-    counts
-        .into_iter()
-        .map(|(k, v)| (k, v as f64 / total as f64))
+    let categories = to_category_vector(text);
+    let n = categories.len();
+    (0..n)
+        .map(|i| {
+            let prev = if i == 0 {
+                None
+            } else {
+                Some(categories[i - 1])
+            };
+            let next = if i + 1 == n {
+                None
+            } else {
+                Some(categories[i + 1])
+            };
+            (prev, categories[i], next)
+        })
         .collect()
 }
 
@@ -735,85 +644,123 @@ pub fn calculate_category_group_trigrams(
     UnicodeCategoryGroup,
     Option<UnicodeCategoryGroup>,
 )> {
-    let chars: Vec<char> = text.chars().collect();
-
-    if chars.is_empty() {
-        return Vec::new();
-    }
-
-    // Special case for single character
-    if chars.len() == 1 {
-        let group = char_to_category_group(chars[0]);
-        return vec![(None, group, None)];
-    }
-
-    // Special case for two characters
-    if chars.len() == 2 {
-        let group1 = char_to_category_group(chars[0]);
-        let group2 = char_to_category_group(chars[1]);
-        return vec![(None, group1, Some(group2)), (Some(group1), group2, None)];
-    }
-
-    let groups: Vec<UnicodeCategoryGroup> =
-        chars.iter().map(|&c| char_to_category_group(c)).collect();
-    let mut trigrams = Vec::with_capacity(chars.len());
-
-    // First character: (None, Group1, Group2)
-    trigrams.push((None, groups[0], Some(groups[1])));
-
-    // Middle characters: (Group_i-1, Group_i, Group_i+1)
-    for i in 1..groups.len() - 1 {
-        trigrams.push((Some(groups[i - 1]), groups[i], Some(groups[i + 1])));
-    }
-
-    // Last character: (GroupN-1, GroupN, None)
-    let last_idx = groups.len() - 1;
-    trigrams.push((Some(groups[last_idx - 1]), groups[last_idx], None));
-
-    trigrams
+    let groups = to_category_group_vector(text);
+    let n = groups.len();
+    (0..n)
+        .map(|i| {
+            let prev = if i == 0 { None } else { Some(groups[i - 1]) };
+            let next = if i + 1 == n {
+                None
+            } else {
+                Some(groups[i + 1])
+            };
+            (prev, groups[i], next)
+        })
+        .collect()
 }
 
-/// Count the frequencies of Unicode category group trigrams in a text
-pub fn count_category_group_trigrams(
-    text: &str,
+fn owned_bigram((a, b): CategoryBigram) -> (Option<String>, Option<String>) {
+    (a.map(str::to_string), b.map(str::to_string))
+}
+
+fn owned_trigram((a, b, c): CategoryTrigram) -> (Option<String>, String, Option<String>) {
+    (a.map(str::to_string), b.to_string(), c.map(str::to_string))
+}
+
+fn bigram_counts_for(
+    seq: &[u8],
+    edge: usize,
+    name: fn(usize) -> Option<&'static str>,
+) -> HashMap<(Option<String>, Option<String>), usize> {
+    decode_bigrams(sparse_ngram_counts(seq, edge, 2), edge, name)
+        .into_iter()
+        .map(|(key, count)| (owned_bigram(key), count))
+        .collect()
+}
+
+fn trigram_counts_for(
+    seq: &[u8],
+    edge: usize,
+    name: fn(usize) -> Option<&'static str>,
 ) -> HashMap<(Option<String>, String, Option<String>), usize> {
-    let trigrams = calculate_category_group_trigrams(text);
-    let mut counts = HashMap::new();
-
-    for (prev_group, current_group, next_group) in trigrams {
-        // Convert category groups to strings, using None where appropriate
-        let prev_group_str = prev_group.map(|g| category_group_to_string(g).to_string());
-        let current_group_str = category_group_to_string(current_group).to_string();
-        let next_group_str = next_group.map(|g| category_group_to_string(g).to_string());
-
-        // Increment the count for this trigram
-        *counts
-            .entry((prev_group_str, current_group_str, next_group_str))
-            .or_insert(0) += 1;
-    }
-
-    counts
+    decode_trigrams(sparse_ngram_counts(seq, edge, 3), edge, name)
+        .into_iter()
+        .map(|(key, count)| (owned_trigram(key), count))
+        .collect()
 }
 
-/// Calculate the ratios of Unicode category group trigrams in a text
-pub fn category_group_trigram_ratios(
-    text: &str,
-) -> HashMap<(Option<String>, String, Option<String>), f64> {
-    let counts = count_category_group_trigrams(text);
-
-    // For trigrams, the total count should be the sum of all trigram counts
+fn to_ratios<K: std::hash::Hash + Eq>(counts: HashMap<K, usize>) -> HashMap<K, f64> {
     let total: usize = counts.values().sum();
-
     if total == 0 {
         return HashMap::new();
     }
-
     counts
         .into_iter()
         .map(|(k, v)| (k, v as f64 / total as f64))
         .collect()
 }
 
+/// Count the frequencies of Unicode category bigrams in a text
+pub fn count_category_bigrams(text: &str) -> HashMap<(Option<String>, Option<String>), usize> {
+    bigram_counts_for(
+        &category_index_sequence(text),
+        NUM_CATEGORIES,
+        category_name,
+    )
+}
+
+/// Calculate the ratios of Unicode category bigrams in a text
+pub fn category_bigram_ratios(text: &str) -> HashMap<(Option<String>, Option<String>), f64> {
+    to_ratios(count_category_bigrams(text))
+}
+
+/// Count the frequencies of Unicode category group bigrams in a text
+pub fn count_category_group_bigrams(
+    text: &str,
+) -> HashMap<(Option<String>, Option<String>), usize> {
+    let groups = group_index_sequence(&category_index_sequence(text));
+    bigram_counts_for(&groups, NUM_GROUPS, group_name)
+}
+
+/// Calculate the ratios of Unicode category group bigrams in a text
+pub fn category_group_bigram_ratios(text: &str) -> HashMap<(Option<String>, Option<String>), f64> {
+    to_ratios(count_category_group_bigrams(text))
+}
+
+/// Count the frequencies of Unicode category trigrams in a text
+pub fn count_category_trigrams(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), usize> {
+    trigram_counts_for(
+        &category_index_sequence(text),
+        NUM_CATEGORIES,
+        category_name,
+    )
+}
+
+/// Calculate the ratios of Unicode category trigrams in a text
+pub fn category_trigram_ratios(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), f64> {
+    to_ratios(count_category_trigrams(text))
+}
+
+/// Count the frequencies of Unicode category group trigrams in a text
+pub fn count_category_group_trigrams(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), usize> {
+    let groups = group_index_sequence(&category_index_sequence(text));
+    trigram_counts_for(&groups, NUM_GROUPS, group_name)
+}
+
+/// Calculate the ratios of Unicode category group trigrams in a text
+pub fn category_group_trigram_ratios(
+    text: &str,
+) -> HashMap<(Option<String>, String, Option<String>), f64> {
+    to_ratios(count_category_group_trigrams(text))
+}
+
+#[cfg(test)]
 mod tests {
     // Importing everything since most of the module's functions are tested
     #[allow(unused_imports)]

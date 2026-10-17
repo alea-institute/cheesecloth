@@ -6,6 +6,7 @@ This document provides a complete, detailed inventory of metrics and filters use
 
 - [Character-Level Metrics](#character-level-metrics)
 - [Word-Level & Segmentation Metrics](#word-level--segmentation-metrics)
+- [Line-Structure Metrics](#line-structure-metrics)
 - [Unigram Token Metrics](#unigram-token-metrics)
 - [Pattern Metrics](#pattern-metrics)
 - [Compression Metrics](#compression-metrics)
@@ -51,6 +52,7 @@ This document provides a complete, detailed inventory of metrics and filters use
 | Consecutive Character Runs | Count of runs of consecutive same character types | `consecutive_runs` from `get_all_char_metrics()` |
 | Punctuation Diversity | Count of unique punctuation characters used | `punctuation_diversity` from `get_all_char_metrics()` |
 | Category Entropy | Shannon entropy of Unicode categories | `category_entropy` from `get_all_char_metrics()` |
+| Control Characters (excl. whitespace) | Count / share of Unicode `Cc` characters that are not whitespace (excludes `\t \n \v \f \r` and U+0085); a cleaner binary/garbage signal than the raw `Cc` ratio, which is dominated by line breaks | `control_chars_excluding_whitespace`, `ratio_control_chars_excluding_whitespace` from `get_all_char_metrics()` |
 | All Character Metrics | Combined computation of all character metrics | `get_all_char_metrics()` |
 
 ## Word-Level & Segmentation Metrics
@@ -70,6 +72,20 @@ This document provides a complete, detailed inventory of metrics and filters use
 | Split Paragraphs | Split text into paragraphs | `split_paragraphs()` |
 | Segment Paragraphs | Alternative function to split text into paragraphs | `segment_paragraphs()` |
 | Segment Sentences | Split text into sentences | `segment_sentences()` |
+
+## Line-Structure Metrics
+
+Lines are split on `\n` and stripped with Python `str.strip()` whitespace semantics; lines that are empty after stripping are ignored. Shares divide by `max(1, n_lines)`; lengths are Unicode code points. No sentence segmentation is involved.
+
+| Metric | Description | Python Method |
+|-------------|-------------|---------------|
+| Short Line Share | Share of non-empty lines with fewer than 5 whitespace-separated words | `short_line_share()` |
+| End Punctuation Share | Share of non-empty lines ending in `. ! ? : ; " ”` | `end_punct_share()` |
+| Duplicate Line Share | Share of non-empty lines that repeat an earlier line (sum of `count - 1` over distinct lines) | `dup_line_share()` |
+| Numeric Line Share | Share of non-empty lines where more than half of the non-space characters are digits (`str.isdigit`) or `$%.,()-/:` | `numeric_line_share()` |
+| Longest Line | Length of the longest stripped non-empty line (0 if none) | `longest_line_length()` |
+| Non-empty Lines | Number of non-empty lines after stripping | `count_nonempty_lines()` |
+| All Line-Structure Metrics | All of the above in one pass; keys `short_line_share`, `end_punct_share`, `dup_line_share`, `numeric_line_share`, `longest_line`, `n_lines` | `get_line_structure_metrics()` |
 
 ## Unigram Token Metrics
 
@@ -145,11 +161,13 @@ This document provides a complete, detailed inventory of metrics and filters use
 
 ## Readability Metrics
 
+All three functions take `(text, include_punctuation=False, case_sensitive=True, average_sentence_length=None)`. The score is `0.25*min(1, avg_token_len/10) + 0.35*min(1, avg_sentence_len/50) + 0.15*min(1, avg_paragraph_len/800) + 0.25*min(1, token_entropy/8)` (same as `AllMetrics.calculate_readability_score()`). The sentence factor uses the built-in terminator-based estimate unless `average_sentence_length` is supplied (e.g. from an external sentence segmenter).
+
 | Metric | Description | Python Method |
 |-------------|-------------|---------------|
-| Readability Score | Overall readability score (0.0-1.0) | `calculate_readability_score()` |
-| Readability Level | Categorical assessment of readability (Easy to Very Complex) | `get_readability_level()` |
-| Readability Factors | Detailed breakdown of factors contributing to readability | `get_readability_factors()` |
+| Readability Score | Overall readability score (0.0-1.0, higher = harder) | `calculate_readability_score()` |
+| Readability Level | Categorical assessment: Easy (<0.3), Moderate (<0.5), Challenging (<0.7), Complex (<0.85), Very Complex | `get_readability_level()` |
+| Readability Factors | `{"score", "level", "factors"}` where `factors` maps `word_complexity`, `sentence_complexity`, `paragraph_complexity`, `vocabulary_complexity` to `{"raw_value", "normalized_score", "weight"}` | `get_readability_factors()` |
 
 ## Combined Metrics
 

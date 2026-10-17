@@ -7,6 +7,8 @@ import json
 import os
 import tempfile
 
+import pytest
+
 from cheesecloth.data import (
     TextDataLoader,
     TextBatchProcessor,
@@ -15,6 +17,14 @@ from cheesecloth.data import (
     process_huggingface_dataset,
 )
 import cheesecloth
+
+# These tests download a dataset from the Hugging Face Hub, so they only run when
+# explicitly requested (e.g. CHEESECLOTH_NETWORK_TESTS=1 pytest).
+requires_network = pytest.mark.skipif(
+    os.environ.get("CHEESECLOTH_NETWORK_TESTS") != "1",
+    reason="network test; set CHEESECLOTH_NETWORK_TESTS=1 to run",
+)
+HF_TEST_DATASET = "stanfordnlp/imdb"
 
 
 def create_test_text_file():
@@ -82,11 +92,12 @@ def test_text_data_loader_jsonl():
         os.unlink(file_path)
 
 
+@requires_network
 def test_text_data_loader_huggingface():
     """Test loading text from a Hugging Face dataset."""
     loader = TextDataLoader()
     # Use a small dataset for testing
-    result = list(loader.load_huggingface_dataset("imdb", split="train[:10]"))
+    result = list(loader.load_huggingface_dataset(HF_TEST_DATASET, split="train[:10]"))
     assert len(result) == 10
 
 
@@ -144,6 +155,7 @@ def test_process_jsonl_file():
         os.unlink(file_path)
 
 
+@requires_network
 def test_process_huggingface_dataset():
     """Test the convenience function for processing a Hugging Face dataset."""
     metrics = ["char_count", "word_count"]
@@ -152,7 +164,7 @@ def test_process_huggingface_dataset():
     )
 
     # Use a small dataset for testing
-    results = process_huggingface_dataset("imdb", analyzer, split="train[:10]")
+    results = process_huggingface_dataset(HF_TEST_DATASET, analyzer, split="train[:10]")
     assert len(results) == 10
     assert "char_count" in results[0]
     assert "word_count" in results[0]

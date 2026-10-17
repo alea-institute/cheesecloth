@@ -63,7 +63,9 @@ def test_trigrams_with_longer_text():
     assert trigrams.get(("Lu", "Ll", "Ll")) == 1  # H → e → l
     # Instead of manually counting, trust the implementation and check the actual value
     actual_ll_ll_count = trigrams.get(("Ll", "Ll", "Ll"))
-    assert actual_ll_ll_count == 5, f"Expected exactly 5 Ll→Ll→Ll transitions, got {actual_ll_ll_count}"
+    assert actual_ll_ll_count == 5, (
+        f"Expected exactly 5 Ll→Ll→Ll transitions, got {actual_ll_ll_count}"
+    )
     assert trigrams.get(("Ll", "Po", "Zs")) == 1  # o → , → space
     assert trigrams.get(("Po", "Zs", "Ll")) == 1  # , → space → w
     assert trigrams.get(("Ll", "Po", "END")) == 1  # d → ! → end
@@ -75,7 +77,9 @@ def test_trigrams_with_longer_text():
     assert group_trigrams.get(("START", "L", "L")) == 1  # Start → letter → letter
     # Again, trust the implementation for the actual count
     actual_l_l_l_count = group_trigrams.get(("L", "L", "L"))
-    assert actual_l_l_l_count == 6, f"Expected exactly 6 L→L→L transitions, got {actual_l_l_l_count}"
+    assert actual_l_l_l_count == 6, (
+        f"Expected exactly 6 L→L→L transitions, got {actual_l_l_l_count}"
+    )
     assert group_trigrams.get(("L", "P", "Z")) == 1  # Letter → punctuation → space
     assert group_trigrams.get(("P", "Z", "L")) == 1  # Punctuation → space → letter
     assert group_trigrams.get(("L", "P", "END")) == 1  # Letter → punctuation → end
