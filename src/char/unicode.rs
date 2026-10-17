@@ -436,6 +436,12 @@ pub struct CharMetrics {
     pub lowercase: usize,
     pub alphanumeric: usize,
 
+    /// Characters in Unicode category `Cc` that are *not* whitespace
+    /// (`char::is_whitespace`, i.e. excludes `\t`, `\n`, `\x0B`, `\x0C`, `\r`
+    /// and U+0085). Useful for spotting binary/garbled text, since raw `Cc`
+    /// counts are dominated by ordinary line breaks and tabs.
+    pub control_chars_excluding_whitespace: usize,
+
     // New count metrics
     pub char_type_transitions: usize,
     pub consecutive_runs: usize,
@@ -452,17 +458,38 @@ pub struct CharMetrics {
     pub ratio_lowercase: f64,
     pub ratio_alphanumeric: f64,
     pub ratio_alpha_to_numeric: f64,
+    pub ratio_control_chars_excluding_whitespace: f64,
     pub char_entropy: f64,
 
     // New ratio metrics
     pub case_ratio: f64,
     pub category_entropy: f64,
+
+    /// Frequency of every distinct character
+    pub char_frequency: std::collections::HashMap<char, usize>,
+}
+
+/// Shannon entropy (bits) of a count distribution with the given total
+fn entropy_of_counts<I: IntoIterator<Item = usize>>(counts: I, total: usize) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    let total = total as f64;
+    let mut entropy = 0.0;
+    for count in counts {
+        if count > 0 {
+            let probability = count as f64 / total;
+            entropy -= probability * probability.log2();
+        }
+    }
+    entropy
 }
 
 /// Calculates all character metrics in a single pass (optimized Rust implementation)
 /// Returns both count metrics and ratio metrics in a single struct
 pub fn calculate_char_metrics(text: &str) -> CharMetrics {
-    // Initial counts
+    use crate::char::categories::{char_to_category, UnicodeCategory, NUM_CATEGORIES};
+
     let mut total_chars = 0;
     let mut letters = 0;
     let mut digits = 0;
@@ -473,90 +500,100 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
     let mut uppercase = 0;
     let mut lowercase = 0;
     let mut alphanumeric = 0;
+    let mut control_chars_excluding_whitespace = 0;
 
-    // For entropy calculation
-    let mut char_counts = std::collections::HashMap::new();
+    // Character frequencies: dense table for ASCII, map for everything else
+    let mut ascii_counts = [0usize; 128];
+    let mut other_counts: std::collections::HashMap<char, usize> = std::collections::HashMap::new();
 
-    // For punctuation diversity
-    let mut unique_punctuation = std::collections::HashSet::new();
+    // Punctuation diversity
+    let mut unique_punctuation = HashSet::new();
 
-    // For category entropy
-    use crate::char::categories::char_to_category;
-    let mut category_counts = std::collections::HashMap::new();
+    // Category counts for category entropy
+    let mut category_counts = [0usize; NUM_CATEGORIES];
 
-    // Use a single pass through the text to count all metrics at once
+    // Character-type transitions / runs (same classes as `get_char_type`)
+    let mut previous_type: Option<u8> = None;
+    let mut char_type_transitions = 0;
+
     for c in text.chars() {
         total_chars += 1;
 
-        // Update character frequency for entropy calculation
-        *char_counts.entry(c).or_insert(0) += 1;
+        if c.is_ascii() {
+            ascii_counts[c as usize] += 1;
+        } else {
+            non_ascii += 1;
+            *other_counts.entry(c).or_insert(0) += 1;
+        }
 
-        // Update category for category entropy
         let category = char_to_category(c);
-        *category_counts.entry(category).or_insert(0) += 1;
+        category_counts[category as usize] += 1;
 
-        if is_letter(c) {
+        let char_type = if is_letter(c) {
             letters += 1;
             alphanumeric += 1;
-
             if is_uppercase(c) {
                 uppercase += 1;
-            } else if is_lowercase(c) {
-                lowercase += 1;
+                1
+            } else {
+                if is_lowercase(c) {
+                    lowercase += 1;
+                }
+                2
             }
         } else if is_digit(c) {
             digits += 1;
             alphanumeric += 1;
+            3
         } else if is_punctuation(c) {
             punctuation += 1;
             unique_punctuation.insert(c);
+            4
         } else if is_symbol(c) {
             symbols += 1;
+            5
         } else if is_whitespace(c) {
             whitespace += 1;
+            6
+        } else {
+            7
+        };
+
+        if category == UnicodeCategory::Cc && !c.is_whitespace() {
+            control_chars_excluding_whitespace += 1;
         }
 
-        if !c.is_ascii() {
-            non_ascii += 1;
+        if let Some(prev) = previous_type {
+            if prev != char_type {
+                char_type_transitions += 1;
+            }
         }
+        previous_type = Some(char_type);
     }
 
-    // Calculate metrics that need a separate pass
-    let char_type_transitions = count_char_type_transitions(text);
-    let consecutive_runs = count_consecutive_runs(text);
+    let consecutive_runs = if total_chars == 0 {
+        0
+    } else {
+        char_type_transitions + 1
+    };
     let punctuation_diversity = unique_punctuation.len();
 
-    // Calculate ratios, handling empty text cases
-    let ratio_letters = if total_chars > 0 {
-        letters as f64 / total_chars as f64
-    } else {
-        0.0
+    let ratio_of_total = |count: usize| {
+        if total_chars > 0 {
+            count as f64 / total_chars as f64
+        } else {
+            0.0
+        }
     };
-    let ratio_digits = if total_chars > 0 {
-        digits as f64 / total_chars as f64
-    } else {
-        0.0
-    };
-    let ratio_punctuation = if total_chars > 0 {
-        punctuation as f64 / total_chars as f64
-    } else {
-        0.0
-    };
-    let ratio_symbols = if total_chars > 0 {
-        symbols as f64 / total_chars as f64
-    } else {
-        0.0
-    };
-    let ratio_whitespace = if total_chars > 0 {
-        whitespace as f64 / total_chars as f64
-    } else {
-        0.0
-    };
-    let ratio_non_ascii = if total_chars > 0 {
-        non_ascii as f64 / total_chars as f64
-    } else {
-        0.0
-    };
+    let ratio_letters = ratio_of_total(letters);
+    let ratio_digits = ratio_of_total(digits);
+    let ratio_punctuation = ratio_of_total(punctuation);
+    let ratio_symbols = ratio_of_total(symbols);
+    let ratio_whitespace = ratio_of_total(whitespace);
+    let ratio_non_ascii = ratio_of_total(non_ascii);
+    let ratio_alphanumeric = ratio_of_total(alphanumeric);
+    let ratio_control_chars_excluding_whitespace =
+        ratio_of_total(control_chars_excluding_whitespace);
     let ratio_uppercase = if letters > 0 {
         uppercase as f64 / letters as f64
     } else {
@@ -564,11 +601,6 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
     };
     let ratio_lowercase = if letters > 0 {
         lowercase as f64 / letters as f64
-    } else {
-        0.0
-    };
-    let ratio_alphanumeric = if total_chars > 0 {
-        alphanumeric as f64 / total_chars as f64
     } else {
         0.0
     };
@@ -580,8 +612,6 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
     } else {
         0.0
     };
-
-    // New ratio metrics
     let case_ratio = if lowercase > 0 {
         uppercase as f64 / lowercase as f64
     } else if uppercase > 0 {
@@ -590,23 +620,20 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
         0.0
     };
 
-    // Calculate character entropy
-    let mut char_entropy = 0.0;
-    if total_chars > 0 {
-        let total_chars_f64 = total_chars as f64;
-        for (_, count) in char_counts {
-            let probability = count as f64 / total_chars_f64;
-            char_entropy -= probability * probability.log2();
-        }
-    }
+    let char_entropy = entropy_of_counts(
+        ascii_counts
+            .iter()
+            .copied()
+            .chain(other_counts.values().copied()),
+        total_chars,
+    );
+    let category_entropy = entropy_of_counts(category_counts.iter().copied(), total_chars);
 
-    // Calculate category entropy
-    let mut category_entropy = 0.0;
-    if total_chars > 0 {
-        let total_chars_f64 = total_chars as f64;
-        for (_, count) in category_counts {
-            let probability = count as f64 / total_chars_f64;
-            category_entropy -= probability * probability.log2();
+    let mut char_frequency = other_counts;
+    char_frequency.reserve(ascii_counts.iter().filter(|&&n| n > 0).count());
+    for (i, &count) in ascii_counts.iter().enumerate() {
+        if count > 0 {
+            char_frequency.insert(i as u8 as char, count);
         }
     }
 
@@ -621,8 +648,8 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
         uppercase,
         lowercase,
         alphanumeric,
+        control_chars_excluding_whitespace,
 
-        // New count metrics
         char_type_transitions,
         consecutive_runs,
         punctuation_diversity,
@@ -637,11 +664,12 @@ pub fn calculate_char_metrics(text: &str) -> CharMetrics {
         ratio_lowercase,
         ratio_alphanumeric,
         ratio_alpha_to_numeric,
+        ratio_control_chars_excluding_whitespace,
         char_entropy,
 
-        // New ratio metrics
         case_ratio,
         category_entropy,
+        char_frequency,
     }
 }
 

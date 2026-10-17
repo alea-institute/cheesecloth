@@ -9,9 +9,9 @@ def test_inline_caching_performance():
     text = "Hello, world! 123 ©" * 1000
 
     # Get the optimized unicode category frequency
-    start_time = time.time()
+    start_time = time.perf_counter()
     result1 = cheesecloth.get_unicode_category_frequency(text)
-    optimized_time = time.time() - start_time
+    optimized_time = time.perf_counter() - start_time
 
     # Create a simple non-optimized implementation for comparison
     def standard_method(text):
@@ -22,9 +22,9 @@ def test_inline_caching_performance():
         return counts
 
     # Time the non-optimized version
-    start_time = time.time()
+    start_time = time.perf_counter()
     result2 = standard_method(text)
-    standard_time = time.time() - start_time
+    standard_time = time.perf_counter() - start_time
 
     # Convert result2 keys to strings for comparison
     result2_str = {k: v for k, v in result2.items()}
@@ -38,11 +38,11 @@ def test_inline_caching_performance():
     print("\nPerformance comparison for inline caching:")
     print(f"  Optimized time: {optimized_time:.6f}s")
     print(f"  Standard time: {standard_time:.6f}s")
-    print(f"  Speedup ratio: {standard_time / optimized_time:.2f}x")
+    print(f"  Speedup ratio: {standard_time / max(optimized_time, 1e-9):.2f}x")
 
     # The optimized version should be significantly faster
     assert optimized_time < standard_time / 5, (
-        f"Inline caching didn't provide enough speedup: {standard_time / optimized_time:.2f}x"
+        f"Inline caching didn't provide enough speedup: {standard_time / max(optimized_time, 1e-9):.2f}x"
     )
 
 
@@ -65,14 +65,14 @@ def test_fast_path_optimization():
 
     for _ in range(trials):
         # Time the ASCII-only text
-        start_time = time.time()
+        start_time = time.perf_counter()
         result_ascii = cheesecloth.get_unicode_category_frequency(ascii_text)
-        ascii_times.append(time.time() - start_time)
+        ascii_times.append(time.perf_counter() - start_time)
 
         # Time the mixed text
-        start_time = time.time()
+        start_time = time.perf_counter()
         result_mixed = cheesecloth.get_unicode_category_frequency(mixed_text)
-        mixed_times.append(time.time() - start_time)
+        mixed_times.append(time.perf_counter() - start_time)
 
     # Calculate average times
     ascii_time = sum(ascii_times) / trials
@@ -90,7 +90,7 @@ def test_fast_path_optimization():
     print("\nFast path performance comparison:")
     print(f"  ASCII-only time: {ascii_time:.6f}s")
     print(f"  Mixed text time: {mixed_time:.6f}s")
-    print(f"  Ratio: {mixed_time / ascii_time:.2f}x")
+    print(f"  Ratio: {mixed_time / max(ascii_time, 1e-9):.2f}x")
 
     # Check functionality only, skip timing assertion which can be flaky in CI
     # ASCII processing typically should be faster per character, but we'll skip this assertion

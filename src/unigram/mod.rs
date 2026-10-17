@@ -15,6 +15,7 @@
 //! follows linguistic word boundaries, making it useful for stylometric analysis,
 //! readability assessment, and author identification.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -427,11 +428,11 @@ pub fn top_5_token_coverage(text: &str, include_punctuation: bool, case_sensitiv
 pub fn short_token_ratio(
     text: &str,
     include_punctuation: bool,
-    _case_sensitive: bool, // Unused but kept for API consistency
+    _case_sensitive: bool,    // Unused but kept for API consistency
     threshold: Option<usize>, // New parameter
 ) -> f64 {
     let threshold = threshold.unwrap_or(3);
-    
+
     let tokens = if include_punctuation {
         tokenize_with_punctuation(text)
     } else {
@@ -444,7 +445,10 @@ pub fn short_token_ratio(
 
     // Clone the tokens for iterating to avoid ownership issues
     let tokens_vec = tokens.clone();
-    let short_count = tokens_vec.iter().filter(|token| token.len() <= threshold).count();
+    let short_count = tokens_vec
+        .iter()
+        .filter(|token| token.chars().count() <= threshold)
+        .count();
 
     short_count as f64 / tokens.len() as f64
 }
@@ -492,11 +496,11 @@ pub fn short_token_ratio_default(
 pub fn long_token_ratio(
     text: &str,
     include_punctuation: bool,
-    _case_sensitive: bool, // Unused but kept for API consistency
+    _case_sensitive: bool,    // Unused but kept for API consistency
     threshold: Option<usize>, // New parameter
 ) -> f64 {
     let threshold = threshold.unwrap_or(7);
-    
+
     let tokens = if include_punctuation {
         tokenize_with_punctuation(text)
     } else {
@@ -509,7 +513,10 @@ pub fn long_token_ratio(
 
     // Clone the tokens for iterating to avoid ownership issues
     let tokens_vec = tokens.clone();
-    let long_count = tokens_vec.iter().filter(|token| token.len() >= threshold).count();
+    let long_count = tokens_vec
+        .iter()
+        .filter(|token| token.chars().count() >= threshold)
+        .count();
 
     long_count as f64 / tokens.len() as f64
 }
@@ -570,15 +577,58 @@ pub fn calculate_all_unigram_metrics(
     include_punctuation: bool,
     case_sensitive: bool,
 ) -> UnigramMetrics {
-    // Get tokens (with or without punctuation)
-    let tokens = if include_punctuation {
-        tokenize_with_punctuation(text)
+    if include_punctuation {
+        let tokens = tokenize_with_punctuation(text);
+        unigram_metrics_from_tokens(tokens.iter().map(String::as_str), case_sensitive)
     } else {
-        tokenize(text)
-    };
+        unigram_metrics_from_tokens(UnicodeSegmentation::unicode_words(text), case_sensitive)
+    }
+}
+
+/// Frequency key for a token: borrowed when no case folding is needed.
+fn frequency_key(token: &str, case_sensitive: bool) -> Cow<'_, str> {
+    if case_sensitive {
+        Cow::Borrowed(token)
+    } else if token.is_ascii() {
+        if token.bytes().any(|b| b.is_ascii_uppercase()) {
+            Cow::Owned(token.to_ascii_lowercase())
+        } else {
+            Cow::Borrowed(token)
+        }
+    } else {
+        Cow::Owned(token.to_lowercase())
+    }
+}
+
+/// Compute all unigram metrics from a token stream in a single pass, without
+/// copying tokens. Token lengths are measured in Unicode code points.
+fn unigram_metrics_from_tokens<'a, I: Iterator<Item = &'a str>>(
+    tokens: I,
+    case_sensitive: bool,
+) -> UnigramMetrics {
+    let mut frequency_map: HashMap<Cow<'a, str>, usize> = HashMap::new();
+    let mut token_count = 0usize;
+    let mut total_token_length = 0usize;
+    let mut short_count = 0usize;
+    let mut long_count = 0usize;
+
+    for token in tokens {
+        token_count += 1;
+        let length = token.chars().count();
+        total_token_length += length;
+        if length <= 3 {
+            short_count += 1;
+        }
+        if length >= 7 {
+            long_count += 1;
+        }
+        *frequency_map
+            .entry(frequency_key(token, case_sensitive))
+            .or_insert(0) += 1;
+    }
 
     // Handle empty text case
-    if tokens.is_empty() {
+    if token_count == 0 {
         return UnigramMetrics {
             token_count: 0,
             unique_token_count: 0,
@@ -594,73 +644,32 @@ pub fn calculate_all_unigram_metrics(
         };
     }
 
-    // Calculate token frequency in a single pass
-    let mut frequency_map = HashMap::new();
-    let token_count = tokens.len();
-    let mut total_token_length = 0;
-
-    // Store a clone of tokens for later use
-    let tokens_clone = tokens.clone();
-
-    for token in &tokens {
-        total_token_length += token.len();
-        let key = if case_sensitive {
-            token.clone()
-        } else {
-            token.to_lowercase()
-        };
-
-        *frequency_map.entry(key).or_insert(0) += 1;
-    }
-
     let unique_token_count = frequency_map.len();
     let total_tokens_f64 = token_count as f64;
-
-    // Calculate type-token ratio
     let type_token_ratio = unique_token_count as f64 / total_tokens_f64;
-
-    // Calculate repetition rate
     let repetition_rate = 1.0 - type_token_ratio;
 
-    // Calculate entropy
     let mut entropy = 0.0;
     let mut max_frequency = 0;
-
+    let mut hapax_count = 0;
+    // Five largest counts, kept in descending order
+    let mut top_5 = [0usize; 5];
     for &count in frequency_map.values() {
-        if count > max_frequency {
-            max_frequency = count;
+        max_frequency = max_frequency.max(count);
+        if count == 1 {
+            hapax_count += 1;
         }
-
+        if count > top_5[4] {
+            let mut i = 4;
+            while i > 0 && top_5[i - 1] < count {
+                top_5[i] = top_5[i - 1];
+                i -= 1;
+            }
+            top_5[i] = count;
+        }
         let probability = count as f64 / total_tokens_f64;
         entropy -= probability * probability.log2();
     }
-
-    // Calculate max frequency ratio
-    let max_frequency_ratio = max_frequency as f64 / total_tokens_f64;
-
-    // Calculate average token length
-    let average_token_length = if token_count > 0 {
-        total_token_length as f64 / token_count as f64
-    } else {
-        0.0
-    };
-
-    // Calculate hapax legomena ratio
-    let hapax_count = frequency_map.values().filter(|&&count| count == 1).count();
-    let hapax_legomena_ratio = hapax_count as f64 / token_count as f64;
-
-    // Calculate top-5 token coverage
-    let mut counts: Vec<usize> = frequency_map.values().cloned().collect();
-    counts.sort_unstable_by(|a, b| b.cmp(a));
-    let top_5_sum: usize = counts.iter().take(5).sum();
-    let top_5_token_coverage = top_5_sum as f64 / token_count as f64;
-
-    // Calculate short token ratio and long token ratio
-    // Use default thresholds (3 for short, 7 for long)
-    let short_count = tokens_clone.iter().filter(|token| token.len() <= 3).count();
-    let long_count = tokens_clone.iter().filter(|token| token.len() >= 7).count();
-    let short_token_ratio = short_count as f64 / token_count as f64;
-    let long_token_ratio = long_count as f64 / token_count as f64;
 
     UnigramMetrics {
         token_count,
@@ -668,12 +677,12 @@ pub fn calculate_all_unigram_metrics(
         type_token_ratio,
         repetition_rate,
         token_entropy: entropy,
-        max_frequency_ratio,
-        average_token_length,
-        hapax_legomena_ratio,
-        top_5_token_coverage,
-        short_token_ratio,
-        long_token_ratio,
+        max_frequency_ratio: max_frequency as f64 / total_tokens_f64,
+        average_token_length: total_token_length as f64 / total_tokens_f64,
+        hapax_legomena_ratio: hapax_count as f64 / total_tokens_f64,
+        top_5_token_coverage: top_5.iter().sum::<usize>() as f64 / total_tokens_f64,
+        short_token_ratio: short_count as f64 / total_tokens_f64,
+        long_token_ratio: long_count as f64 / total_tokens_f64,
     }
 }
 
@@ -791,97 +800,148 @@ mod tests {
     #[test]
     fn test_short_token_ratio() {
         let text = "The cat and the dog ran. I am glad.";
-        // Expected tokens with include_punctuation=false: 
+        // Expected tokens with include_punctuation=false:
         // ["The", "cat", "and", "the", "dog", "ran", "I", "am", "glad"]
         // Short tokens (≤3): "cat", "and", "the", "dog", "ran", "I", "am", "The" = 8 out of 9
-        
+
         // First verify tokens match our expectation
         let tokens = tokenize(text);
-        assert_eq!(tokens.len(), 9, "Expected 9 tokens, got {}: {:?}", tokens.len(), tokens);
-        
+        assert_eq!(
+            tokens.len(),
+            9,
+            "Expected 9 tokens, got {}: {:?}",
+            tokens.len(),
+            tokens
+        );
+
         let short_count = tokens.iter().filter(|token| token.len() <= 3).count();
-        assert_eq!(short_count, 8, "Expected 8 tokens of length ≤3, got {}", short_count);
-        
+        assert_eq!(
+            short_count, 8,
+            "Expected 8 tokens of length ≤3, got {}",
+            short_count
+        );
+
         // Calculate ratio
         let expected_ratio = 8.0 / 9.0;
         let ratio = short_token_ratio(text, false, false, None);
-        assert!((ratio - expected_ratio).abs() < 1e-10, 
-                "Expected ratio {}, got {}", expected_ratio, ratio);
+        assert!(
+            (ratio - expected_ratio).abs() < 1e-10,
+            "Expected ratio {}, got {}",
+            expected_ratio,
+            ratio
+        );
     }
 
     #[test]
     fn test_long_token_ratio() {
         let text = "Extraordinary vocabulary demonstrates sophisticated communication abilities.";
-        // Expected tokens with include_punctuation=false: 
+        // Expected tokens with include_punctuation=false:
         // ["Extraordinary", "vocabulary", "demonstrates", "sophisticated", "communication", "abilities"]
         // Long tokens (≥7): All 6 out of 6
-        
+
         // First verify tokens match our expectation
         let tokens = tokenize(text);
-        assert_eq!(tokens.len(), 6, "Expected 6 tokens, got {}: {:?}", tokens.len(), tokens);
-        
+        assert_eq!(
+            tokens.len(),
+            6,
+            "Expected 6 tokens, got {}: {:?}",
+            tokens.len(),
+            tokens
+        );
+
         let long_count = tokens.iter().filter(|token| token.len() >= 7).count();
-        assert_eq!(long_count, 6, "Expected 6 tokens of length ≥7, got {}", long_count);
-        
+        assert_eq!(
+            long_count, 6,
+            "Expected 6 tokens of length ≥7, got {}",
+            long_count
+        );
+
         // Calculate ratio
         let expected_ratio = 6.0 / 6.0;
         let ratio = long_token_ratio(text, false, false, None);
-        assert!((ratio - expected_ratio).abs() < 1e-10, 
-                "Expected ratio {}, got {}", expected_ratio, ratio);
+        assert!(
+            (ratio - expected_ratio).abs() < 1e-10,
+            "Expected ratio {}, got {}",
+            expected_ratio,
+            ratio
+        );
     }
 
     #[test]
     fn test_calculate_all_unigram_metrics() {
         let text = "The cat and the dog. The cat ran quickly.";
-        
+
         // First verify tokens to ensure we understand what's being calculated
         let tokens = tokenize(text);
         println!("Tokens: {:?}", tokens);
-        
-        // Expected tokens with include_punctuation=false: 
+
+        // Expected tokens with include_punctuation=false:
         // ["The", "cat", "and", "the", "dog", "The", "cat", "ran", "quickly"]
-        
-        let unique_tokens: HashSet<String> = tokens.iter()
-            .map(|t| t.to_lowercase())
-            .collect();
+
+        let unique_tokens: HashSet<String> = tokens.iter().map(|t| t.to_lowercase()).collect();
         println!("Unique tokens (case-insensitive): {:?}", unique_tokens);
-        // Expected unique tokens (case insensitive): 
+        // Expected unique tokens (case insensitive):
         // ["the", "cat", "and", "dog", "ran", "quickly"]
-        
+
         let metrics = calculate_all_unigram_metrics(text, false, false);
 
         // Verify basic metrics
-        assert_eq!(metrics.token_count, 9, "Expected 9 tokens, got {}", metrics.token_count);
-        assert_eq!(metrics.unique_token_count, 6, 
-            "Expected 6 unique tokens (case-insensitive), got {}", metrics.unique_token_count);
+        assert_eq!(
+            metrics.token_count, 9,
+            "Expected 9 tokens, got {}",
+            metrics.token_count
+        );
+        assert_eq!(
+            metrics.unique_token_count, 6,
+            "Expected 6 unique tokens (case-insensitive), got {}",
+            metrics.unique_token_count
+        );
 
         // Verify our new metrics
         let expected_hapax_ratio = 4.0 / 9.0; // and, dog, ran, quickly are hapax legomena
-        assert!((metrics.hapax_legomena_ratio - expected_hapax_ratio).abs() < 1e-10,
-            "Expected hapax ratio {}, got {}", expected_hapax_ratio, metrics.hapax_legomena_ratio);
+        assert!(
+            (metrics.hapax_legomena_ratio - expected_hapax_ratio).abs() < 1e-10,
+            "Expected hapax ratio {}, got {}",
+            expected_hapax_ratio,
+            metrics.hapax_legomena_ratio
+        );
 
         let expected_top5_coverage = 8.0 / 9.0; // the (3), cat (2), and, dog, ran = 8 out of 9
-        assert!((metrics.top_5_token_coverage - expected_top5_coverage).abs() < 1e-10,
-            "Expected top5 coverage {}, got {}", expected_top5_coverage, metrics.top_5_token_coverage);
+        assert!(
+            (metrics.top_5_token_coverage - expected_top5_coverage).abs() < 1e-10,
+            "Expected top5 coverage {}, got {}",
+            expected_top5_coverage,
+            metrics.top_5_token_coverage
+        );
 
         // Count short tokens (≤3): the, cat, and, dog, ran = 6 out of 9
-        let short_count = tokens.iter()
-            .filter(|t| t.len() <= 3)
-            .count();
-        println!("Short tokens (≤3): {:?}", tokens.iter().filter(|t| t.len() <= 3).collect::<Vec<_>>());
+        let short_count = tokens.iter().filter(|t| t.len() <= 3).count();
+        println!(
+            "Short tokens (≤3): {:?}",
+            tokens.iter().filter(|t| t.len() <= 3).collect::<Vec<_>>()
+        );
         let expected_short_ratio = short_count as f64 / tokens.len() as f64;
-        
-        assert!((metrics.short_token_ratio - expected_short_ratio).abs() < 1e-10,
-            "Expected short token ratio {}, got {}", expected_short_ratio, metrics.short_token_ratio);
+
+        assert!(
+            (metrics.short_token_ratio - expected_short_ratio).abs() < 1e-10,
+            "Expected short token ratio {}, got {}",
+            expected_short_ratio,
+            metrics.short_token_ratio
+        );
 
         // Count long tokens (≥7): quickly = 1 out of 9
-        let long_count = tokens.iter()
-            .filter(|t| t.len() >= 7)
-            .count();
-        println!("Long tokens (≥7): {:?}", tokens.iter().filter(|t| t.len() >= 7).collect::<Vec<_>>());
+        let long_count = tokens.iter().filter(|t| t.len() >= 7).count();
+        println!(
+            "Long tokens (≥7): {:?}",
+            tokens.iter().filter(|t| t.len() >= 7).collect::<Vec<_>>()
+        );
         let expected_long_ratio = long_count as f64 / tokens.len() as f64;
-        
-        assert!((metrics.long_token_ratio - expected_long_ratio).abs() < 1e-10,
-            "Expected long token ratio {}, got {}", expected_long_ratio, metrics.long_token_ratio);
+
+        assert!(
+            (metrics.long_token_ratio - expected_long_ratio).abs() < 1e-10,
+            "Expected long token ratio {}, got {}",
+            expected_long_ratio,
+            metrics.long_token_ratio
+        );
     }
 }

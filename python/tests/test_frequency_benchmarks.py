@@ -7,10 +7,11 @@ import cheesecloth
 def war_and_peace_text():
     """Load War and Peace text data using a relative path instead of hardcoded path."""
     import os
+
     # Get the path to the data file - relative to project root
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     data_path = os.path.join(repo_root, "data", "war_and_peace.txt")
-    
+
     with open(data_path, "r", encoding="utf-8") as f:
         text = f.read()
         print(f"\nWar and Peace full text: {len(text)} characters")

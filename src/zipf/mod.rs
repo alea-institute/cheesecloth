@@ -43,7 +43,7 @@ pub fn calculate_zipf_fitness<T: std::hash::Hash + Eq>(frequencies: &HashMap<T, 
         .map(|(token, &count)| (count, token))
         .collect();
 
-    sorted_freqs.sort_by(|a, b| b.0.cmp(&a.0)); // Sort by count (descending)
+    sorted_freqs.sort_by_key(|entry| std::cmp::Reverse(entry.0)); // Sort by count (descending)
 
     // For a perfect Zipf distribution, frequency ∝ 1/rank
     // So f_i = C/i where C is a constant and i is the rank

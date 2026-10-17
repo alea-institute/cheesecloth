@@ -17,28 +17,31 @@
 
 use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tokenizers::tokenizer::{Result, Tokenizer};
 
 // Cache for storing tokenizers
 lazy_static! {
-    static ref TOKENIZER_CACHE: Mutex<HashMap<String, Tokenizer>> = Mutex::new(HashMap::new());
+    static ref TOKENIZER_CACHE: Mutex<HashMap<String, Arc<Tokenizer>>> = Mutex::new(HashMap::new());
 }
 
-/// Gets a tokenizer from the cache, or loads it from Hugging Face if not present
-fn get_tokenizer(name: &str) -> Result<Tokenizer> {
+/// Gets a tokenizer from the cache, or loads it from Hugging Face if not present.
+///
+/// Tokenizers are shared via `Arc`: cloning a full `Tokenizer` (vocabulary,
+/// merges, ...) on every call used to cost milliseconds per text.
+fn get_tokenizer(name: &str) -> Result<Arc<Tokenizer>> {
     let mut cache = TOKENIZER_CACHE.lock().unwrap();
 
     // Check if we have it cached
     if let Some(tokenizer) = cache.get(name) {
-        return Ok(tokenizer.clone());
+        return Ok(Arc::clone(tokenizer));
     }
 
     // Load from HuggingFace
-    let tokenizer = Tokenizer::from_pretrained(name, None)?;
+    let tokenizer = Arc::new(Tokenizer::from_pretrained(name, None)?);
 
     // Cache it
-    cache.insert(name.to_string(), tokenizer.clone());
+    cache.insert(name.to_string(), Arc::clone(&tokenizer));
 
     Ok(tokenizer)
 }

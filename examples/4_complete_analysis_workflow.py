@@ -219,12 +219,12 @@ class TextAnalysisWorkflow:
 
             try:
                 compression = result["advanced"]["compression"]["compression_ratio"]
-            except:
+            except (KeyError, TypeError):
                 compression = "N/A"
 
             try:
                 zipf = result["advanced"]["zipf"]["zipf_fitness_score"]
-            except:
+            except (KeyError, TypeError):
                 zipf = "N/A"
 
             print(

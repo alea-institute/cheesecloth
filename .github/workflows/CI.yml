@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint (rustfmt, clippy, ruff, mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        env:
+          PYO3_PYTHON: python
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Install Python lint tools
+        run: python -m pip install ruff mypy
+      - name: ruff check
+        run: ruff check python examples
+      - name: ruff format
+        run: ruff format --check python examples
+      - name: mypy (type stubs)
+        run: mypy python/cheesecloth/__init__.pyi
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+      - name: Rust tests
+        env:
+          PYO3_PYTHON: python
+        run: cargo test --release
+      - name: Build and install
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip maturin pytest pytest-benchmark
+          .venv/bin/maturin develop --release
+      - name: Python tests
+        run: .venv/bin/python -m pytest python/tests -q --benchmark-disable
+
+  wheels-linux:
+    name: Wheel (linux ${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build abi3 wheel (cp310+)
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: "2_28"
+          args: --release --out dist
+          # openssl headers for the tokenizers -> hf-hub -> native-tls dependency
+          before-script-linux: |
+            (dnf install -y openssl-devel perl-IPC-Cmd || yum install -y openssl-devel perl-IPC-Cmd)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+
+  wheels-macos:
+    name: Wheel (macos ${{ matrix.target }})
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build abi3 wheel (cp310+)
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist
+
+  wheels-windows:
+    name: Wheel (windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Build abi3 wheel (cp310+)
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x64
+          args: --release --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-x64
+          path: dist
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+  wheel-smoke-test:
+    name: Wheel smoke test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    needs: [wheels-linux, wheels-macos, wheels-windows]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: ubuntu-24.04-arm
+            python-version: "3.12"
+          - os: macos-14
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Install wheel
+        shell: bash
+        run: |
+          ls dist
+          python -m pip install --upgrade pip pytest pytest-benchmark
+          python -m pip install --only-binary=cheesecloth --find-links dist cheesecloth
+      - name: Run tests against the installed wheel
+        shell: bash
+        run: |
+          # Run from a copy of the tests (plus the data/ files they read) so the
+          # local python/ source tree is not imported instead of the wheel
+          mkdir -p "$RUNNER_TEMP/smoke/python"
+          cp -r python/tests "$RUNNER_TEMP/smoke/python/tests"
+          cp -r data "$RUNNER_TEMP/smoke/data"
+          cd "$RUNNER_TEMP/smoke"
+          python -c "import cheesecloth, sys; print(sys.version, cheesecloth.__version__, cheesecloth.cheesecloth.__file__)"
+          python -m pytest python/tests -q --benchmark-disable -p no:cacheprovider

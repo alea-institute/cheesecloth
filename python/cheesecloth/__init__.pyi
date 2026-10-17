@@ -17,7 +17,7 @@ For detailed documentation on each function and parameter,
 refer to the actual implementation in Rust with PyO3 bindings.
 """
 
-from typing import Dict, List, Union, Tuple, Set, Any
+from typing import Dict, List, Optional, Union, Tuple, Set, Any, TypedDict
 
 # BatchProcessor class for efficient batch processing of text metrics
 class BatchProcessor:
@@ -530,6 +530,13 @@ def get_all_char_metrics(
 
     Args:
         text: The input text to analyze
+
+    Unicode categories follow the Unicode Character Database, so ``\n``, ``\t``
+    and ``\r`` are counted as ``Cc`` (control) in ``unicode_category_ratios``.
+    ``control_chars_excluding_whitespace`` (count) and
+    ``ratio_control_chars_excluding_whitespace`` (share of all characters)
+    report only the ``Cc`` characters that are *not* whitespace (i.e. excluding
+    ``\t \n \v \f \r`` and U+0085), a cleaner signal for binary/garbled text.
 
     Returns:
         Dictionary containing all character metrics, with nested dictionaries for
@@ -1207,4 +1214,276 @@ def get_all_metrics(
     Returns:
         Nested dictionary containing all metrics organized by category
     """
+    ...
+
+# Readability metrics
+class ReadabilityFactor(TypedDict):
+    raw_value: float
+    normalized_score: float
+    weight: float
+
+class ReadabilityFactors(TypedDict):
+    word_complexity: ReadabilityFactor
+    sentence_complexity: ReadabilityFactor
+    paragraph_complexity: ReadabilityFactor
+    vocabulary_complexity: ReadabilityFactor
+
+class ReadabilityAssessment(TypedDict):
+    score: float
+    level: str
+    factors: ReadabilityFactors
+
+def calculate_readability_score(
+    text: str,
+    include_punctuation: bool = False,
+    case_sensitive: bool = True,
+    average_sentence_length: Optional[float] = None,
+) -> float:
+    """
+    Calculate a composite readability score from 0.0 (easy) to 1.0 (very difficult).
+
+    Weighted combination of four normalised factors: average token length
+    (/10, weight 0.25), average sentence length in words (/50, weight 0.35),
+    average paragraph length in chars (/800, weight 0.15) and unigram token
+    entropy (/8, weight 0.25), each capped at 1.0. Same formula as
+    ``AllMetrics.calculate_readability_score()``.
+
+    Args:
+        text: The input text to analyze
+        include_punctuation: Include punctuation tokens for the word-length and entropy factors
+        case_sensitive: Treat tokens case-sensitively for the entropy factor
+        average_sentence_length: Optional precomputed average sentence length (words);
+            overrides the built-in terminator-based estimate, e.g. to use an external
+            sentence segmenter
+
+    Returns:
+        Readability score between 0.0 and 1.0
+    """
+    ...
+
+def get_readability_level(
+    text: str,
+    include_punctuation: bool = False,
+    case_sensitive: bool = True,
+    average_sentence_length: Optional[float] = None,
+) -> str:
+    """
+    Get the categorical readability level of a text.
+
+    Thresholds on the readability score: < 0.3 "Easy", < 0.5 "Moderate",
+    < 0.7 "Challenging", < 0.85 "Complex", otherwise "Very Complex".
+    Arguments are the same as for ``calculate_readability_score``.
+    """
+    ...
+
+def get_readability_factors(
+    text: str,
+    include_punctuation: bool = False,
+    case_sensitive: bool = True,
+    average_sentence_length: Optional[float] = None,
+) -> ReadabilityAssessment:
+    """
+    Get the readability score, level and per-factor breakdown.
+
+    Returns a dict with keys ``score``, ``level`` and ``factors``; ``factors`` maps
+    ``word_complexity``, ``sentence_complexity``, ``paragraph_complexity`` and
+    ``vocabulary_complexity`` to ``{"raw_value", "normalized_score", "weight"}``.
+    Same shape as ``AllMetrics.get_readability_assessment()``.
+    Arguments are the same as for ``calculate_readability_score``.
+    """
+    ...
+
+# Line-structure metrics
+#
+# All line metrics split the text on "\n", strip each line with Python
+# str.strip() whitespace semantics, and ignore lines that are empty after
+# stripping. Shares divide by max(1, number of non-empty lines); lengths are in
+# Unicode code points.
+
+class LineStructureMetrics(TypedDict):
+    short_line_share: float
+    end_punct_share: float
+    dup_line_share: float
+    numeric_line_share: float
+    longest_line: int
+    n_lines: int
+
+def short_line_share(text: str) -> float:
+    """Share of non-empty lines with fewer than 5 whitespace-separated words."""
+    ...
+
+def end_punct_share(text: str) -> float:
+    """Share of non-empty lines ending in one of . ! ? : ; \" \u201d."""
+    ...
+
+def dup_line_share(text: str) -> float:
+    """Share of non-empty lines that repeat an earlier non-empty line
+    (sum over distinct lines of count - 1)."""
+    ...
+
+def numeric_line_share(text: str) -> float:
+    """Share of non-empty lines where more than half of the non-space characters
+    are digits (str.isdigit) or one of $%.,()-/:."""
+    ...
+
+def longest_line_length(text: str) -> int:
+    """Length in code points of the longest stripped non-empty line (0 if none)."""
+    ...
+
+def count_nonempty_lines(text: str) -> int:
+    """Number of lines that are non-empty after stripping whitespace."""
+    ...
+
+def get_line_structure_metrics(text: str) -> LineStructureMetrics:
+    """
+    Compute all line-structure metrics in a single pass.
+
+    Returns:
+        Dict with keys short_line_share, end_punct_share, dup_line_share,
+        numeric_line_share, longest_line (int) and n_lines (int)
+    """
+    ...
+
+# ML tokenizer (subword) metrics.
+# `tokenizer_path` is a Hugging Face tokenizer name or local path; None uses the
+# library default (GPT-2).
+def tokenize_ml(text: str, tokenizer_path: Optional[str]) -> List[int]:
+    """Tokenize text into subword token ids with an ML tokenizer."""
+    ...
+
+def batch_tokenize_ml(
+    texts: List[str], tokenizer_path: Optional[str]
+) -> List[List[int]]:
+    """Tokenize a batch of texts into subword token ids."""
+    ...
+
+def subword_token_count(text: str, tokenizer_path: Optional[str]) -> int:
+    """Number of subword tokens."""
+    ...
+
+def unique_subword_count(text: str, tokenizer_path: Optional[str]) -> int:
+    """Number of distinct subword tokens."""
+    ...
+
+def subword_type_token_ratio(text: str, tokenizer_path: Optional[str]) -> float:
+    """Type-token ratio over subword tokens."""
+    ...
+
+def subword_repetition_rate(text: str, tokenizer_path: Optional[str]) -> float:
+    """1 - type-token ratio over subword tokens."""
+    ...
+
+def subword_entropy(text: str, tokenizer_path: Optional[str]) -> float:
+    """Shannon entropy (bits) of the subword token distribution."""
+    ...
+
+def subword_efficiency(text: str, tokenizer_path: Optional[str]) -> float:
+    """Tokenization efficiency (information per subword token)."""
+    ...
+
+def get_token_metrics(text: str, tokenizer_path: Optional[str]) -> Dict[str, float]:
+    """
+    All subword metrics in one call: subword_token_count, unique_subword_count,
+    subword_type_token_ratio, subword_repetition_rate, subword_entropy,
+    subword_efficiency.
+    """
+    ...
+
+# Compression metrics
+def compression_ratio(text: str) -> float:
+    """Ratio of original size to deflate-compressed size."""
+    ...
+
+def unigram_compression_ratio(text: str, include_punctuation: bool) -> float:
+    """Compression ratio of the unigram token sequence."""
+    ...
+
+def get_compression_metrics(text: str) -> Dict[str, float]:
+    """
+    Compression metrics: compression_ratio, unigram_compression_ratio,
+    normalized_compression_ratio, compression_efficiency.
+    """
+    ...
+
+# Zipf / power-law / vocabulary growth metrics
+def zipf_fitness_score(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> float:
+    """How closely the unigram frequency distribution follows Zipf's law (0-1)."""
+    ...
+
+def power_law_exponent(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> float:
+    """Estimated power-law exponent of the unigram frequency distribution."""
+    ...
+
+def calculate_burstiness(text: str, tokens: List[str]) -> float:
+    """Burstiness of the given tokens within the text."""
+    ...
+
+def analyze_vocab_growth(text: str, chunk_size: int) -> Dict[str, Any]:
+    """
+    Vocabulary growth over fixed-size chunks: chunks_analyzed,
+    average_new_tokens_per_chunk, cumulative_vocab_sizes.
+    """
+    ...
+
+def get_zipf_metrics(
+    text: str, include_punctuation: bool, case_sensitive: bool
+) -> Dict[str, float]:
+    """Zipf-related metrics (e.g. zipf_fitness_score, power_law_exponent)."""
+    ...
+
+# Pattern-based metrics
+def count_regex_matches(text: str, pattern: str) -> int:
+    """Number of matches of a regular expression."""
+    ...
+
+def contains_regex_pattern(text: str, pattern: str) -> bool:
+    """Whether a regular expression matches anywhere in the text."""
+    ...
+
+def count_copyright_mentions(text: str) -> int:
+    """Number of copyright mentions (e.g. "copyright", "(c)", "©")."""
+    ...
+
+def count_rights_reserved(text: str) -> int:
+    """Number of "all rights reserved" statements."""
+    ...
+
+def count_section_strings(text: str) -> int:
+    """Number of section headings / references."""
+    ...
+
+def count_question_strings(text: str) -> int:
+    """Number of question marks / question strings."""
+    ...
+
+def count_interrogative_questions(text: str) -> int:
+    """Number of questions starting with an interrogative word."""
+    ...
+
+def count_complex_interrogatives(text: str) -> int:
+    """Number of complex interrogative phrases."""
+    ...
+
+def count_factual_statements(text: str) -> int:
+    """Number of factual-statement patterns."""
+    ...
+
+def count_logical_reasoning(text: str) -> int:
+    """Number of logical-reasoning connectives."""
+    ...
+
+def contains_code_characters(text: str) -> bool:
+    """Whether the text contains code-like characters."""
+    ...
+
+def bullet_or_ellipsis_lines_ratio(text: str) -> float:
+    """Share of lines starting with a bullet or ending with an ellipsis."""
+    ...
+
+def contains_blacklist_substring(text: str, blacklist: List[str]) -> bool:
+    """Whether any of the given substrings occurs in the text."""
     ...
